@@ -11,6 +11,42 @@ const int N_CLASSES = 4;
 // Buffer där hela kamerabilden hamnar (176 * 144 bytes)
 uint8_t frame[CAM_W * CAM_H];
 
+#define SMALL_W 24
+#define SMALL_H 24
+#define SMALL_SIZE (SMALL_W * SMALL_H)
+
+// Den nedskalade, normaliserade bilden (24x24 => 576 float-värden)
+float smallImage[SMALL_SIZE];
+
+
+#define EPOCH 50 // max number of epochs
+int epoch_count = 0; // tracks the current epoch
+
+
+void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
+  for (int smallY = 0; smallY < SMALL_H; smallY++) {
+    int fullY = (smallY * CAM_H) / SMALL_H; // motsvarande rad i stora bilden
+    
+    for (int smallX = 0; smallX < SMALL_W; smallX++) {
+      int fullX = (smallX * CAM_W) / SMALL_W; // motsvarande kolumn i stora bilden
+      // index i flat array
+      int fullIndex  = fullY  * CAM_W  + fullX;
+      int smallIndex = smallY * SMALL_W + smallX;
+      // normalisera 0..255 → 0..1
+      smallImage[smallIndex] = fullImage[fullIndex] / 255.0f;
+    }
+  }
+}
+
+
+void training(){
+  // Print the epoch number
+  Serial.print("Current epoch: ");
+  Serial.print(++epoch_count);
+  Serial.println();
+}
+
+
 void setup() {
   Serial.begin(115200);
   while (!Serial) {
@@ -37,14 +73,15 @@ void loop() {
   // Läs en hel frame till 'frame'-arrayen
   Camera.readFrame(frame);
 
-  // Skriv ut de första 20 pixlarna så vi SER att något händer
-  Serial.print("Första pixlar: ");
-  for (int i = 0; i < 20; i++) {
-    Serial.print(frame[i]);
-    Serial.print(' ');
-  }
-  Serial.println();
+  downsampleToSmall(frame, smallImage);
 
+  // Skriv ut de första 20 normaliserade pixlarna så vi ser att något händer
+  Serial.print("Normaliserade pixlar: ");
+    for (int i = 0; i < 20; i++) {
+      Serial.print(smallImage[i], 3);  // 3 decimaler
+      Serial.print(' ');
+    }
+  Serial.println();
   delay(500); // lite paus
 }
 
