@@ -1,8 +1,11 @@
 const int N_CLASSES = 4;
 
-
 #include <Arduino.h>
 #include <Arduino_OV767X.h>
+#include <ArduinoBLE.h>
+#include <Arduino_APDS9960.h>
+
+const int BLEDEVICE 0 // 0 om central, 1 om peripheral
 
 // Vi använder QCIF (176x144) i gråskala – 1 byte per pixel
 #define CAM_W 176
@@ -18,10 +21,8 @@ uint8_t frame[CAM_W * CAM_H];
 // Den nedskalade, normaliserade bilden (24x24 => 576 float-värden)
 float smallImage[SMALL_SIZE];
 
-
 #define EPOCH 50 // max number of epochs
 int epoch_count = 0; // tracks the current epoch
-
 
 void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
   for (int smallY = 0; smallY < SMALL_H; smallY++) {
@@ -39,20 +40,7 @@ void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
 }
 
 
-void training(){
-  // Print the epoch number
-  Serial.print("Current epoch: ");
-  Serial.print(++epoch_count);
-  Serial.println();
-}
-
-
-void setup() {
-  Serial.begin(115200);
-  while (!Serial) {
-    ; // vänta på Serial
-  }
-
+void setup(){
   Serial.println("Startar kamera...");
 
   // Starta kameran: QCIF-upplösning, GRAYSCALE, clock divisor 1
@@ -67,10 +55,33 @@ void setup() {
   Serial.print(Camera.width());
   Serial.print(" x ");
   Serial.println(Camera.height()); // borde vara 176x144
+
+  if (BLEDEVICE == 0) {
+  // Central
+  // Skickar vikterna från Central till Peripheral
+    Serial.println("This is the Central Device. The central device will first get weights from the peripheral device")
+    bleCentralSetUp();
+    BLEDevice peripheral = connectToPeripheral(); //oklart om detta är rätt
+    Serial.println("Central device connected to peripheral device");
+    BLECharacteristic peripheral_characteristic = getWeightCharacteristic(peripheral);
+    Serial.println("Got weight characteristic from peripheral device");
+    //unpacka vikterna från peripheral_characteristic och beräkna nya vikter
+    //skicka tillbaka de nya vikterna till peripheral
+
+
+    //sendWeightsFromCentralToPeripheral(BLECharacteristic);
+
+  } else {
+    //Peripheral
+    Serial.println("Peripheral Device")
+    blePeripheralSetUp();
+    Serial.println("Peripheral device set up and waiting for central to connect");
+    
+
+  }
 }
 
-void loop() {
-  // Läs en hel frame till 'frame'-arrayen
+ void loop(){
   Camera.readFrame(frame);
 
   downsampleToSmall(frame, smallImage);
@@ -83,5 +94,7 @@ void loop() {
     }
   Serial.println();
   delay(500); // lite paus
-}
+ }
+
+
 
