@@ -1,12 +1,5 @@
 import numpy as np
-import tensorflow as tf
-import visualkeras
-import matplotlib.pyplot as plt
-
 from pathlib import Path
-
-from sklearn.model_selection import train_test_split
-from tinymlgen import port
 from PIL import Image
 
 
@@ -118,15 +111,15 @@ for i, suit in enumerate(suits):
 label_to_class = {i: name for i, name in enumerate(classes)}
 
 # Skriv tränings och valideringsfil(alla bilder) i c++ format
-def write_data_to_cpp(filename, images, labels):
-    with open(filename, "w") as f:
+def write_data_to_cpp(filename, images, labels, data_group):
+    with open(filename, "a") as f:
         f.write(f"// Data file generated from {len(images)} images\n")
         f.write(f"#define NUM_SAMPLES {len(images)}\n")
         f.write(f"#define IMAGE_WIDTH {images.shape[1]}\n")
         f.write(f"#define IMAGE_HEIGHT {images.shape[2]}\n")
         f.write(f"#define IMAGE_CHANNELS {images.shape[3]}\n\n")
 
-        f.write("const float images[NUM_SAMPLES][IMAGE_WIDTH][IMAGE_HEIGHT][IMAGE_CHANNELS] = {\n")
+        f.write("const float " + data_group + "Images[NUM_SAMPLES][IMAGE_WIDTH][IMAGE_HEIGHT][IMAGE_CHANNELS] = {\n")
         for img in images:
             f.write("  {\n")
             for row in img:
@@ -136,14 +129,15 @@ def write_data_to_cpp(filename, images, labels):
             f.write("  },\n")
         f.write("};\n\n")
 
-        f.write("const int labels[NUM_SAMPLES] = {\n")
+        f.write("const int " + data_group + "Labels[NUM_SAMPLES] = {\n")
         for label in labels:
             f.write(f"  {label},\n")
         f.write("};\n")
 
 # skriv träningsdata till cpp fil
-write_data_to_cpp("suit_train_data.cpp", images, suit_labels)
 
-write_data_to_cpp("suit_val_data.cpp", val_images, val_suit_labels)
+write_data_to_cpp("data.h", images, suit_labels, "train")
 
-write_data_to_cpp("suit_test_data.cpp", test_images, test_suit_labels)
+write_data_to_cpp("data.h", val_images, val_suit_labels, "val")
+
+write_data_to_cpp("data.h", test_images, test_suit_labels, "test")
