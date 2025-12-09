@@ -18,74 +18,20 @@ struct Layer {
 };
 
 Layer* layers = nullptr;
-size_t layerSizes[] = {100, 10, 4};
+size_t layerSizes[] = {784, 50, 10};
 size_t nbrLayers = sizeof(layerSizes) / sizeof(layerSizes[0]);
-
-void createModel() {
-    layers = new Layer[nbrLayers]();
-    layers[0].neurons = new Neuron[layerSizes[0]]();
-    for (size_t layer = 1; layer < nbrLayers; layer++) {
-        layers[layer].neurons = new Neuron[layerSizes[layer]]();
-        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) {
-            layers[layer].neurons[neuron] = createNeuron(layer);
-        }
-    }
-}
-
-void trainModel(float* input, size_t correctSuit) {
-    float* correctArray = new float[layerSizes[nbrLayers - 1]]();
-    correctArray[correctSuit] = 1.0f;
-    forwardPropagation(input);
-    backwardPropagation(correctArray);
-    delete[] correctArray;
-}
 
 Neuron createNeuron(size_t layerIndex) {
     Neuron neuron;
     neuron.weights = new float[layerSizes[layerIndex - 1]]();
     neuron.weightDerivatives = new float[layerSizes[layerIndex - 1]]();
     for (size_t input = 0; input < layerSizes[layerIndex - 1]; input++) {
-        neuron.weights[input] = (float) random(-1000, 1000) / 1000.0; // Check if this works on Arduino, otherwise change
+        neuron.weights[input] = (rand() * 1.0 /RAND_MAX - 0.5) * 2;
+        //neuron.weights[input] = (float) random(-1000, 1000) / 1000.0; // Check if this works on Arduino, otherwise change
     }
-    neuron.bias = (float) random(-1000, 1000) / 1000.0; // Check if this works on Arduino, otherwise change
+    neuron.bias = (rand() * 1.0 /RAND_MAX - 0.5) * 2;
+    //neuron.bias = (float) random(-1000, 1000) / 1000.0; // Check if this works on Arduino, otherwise change
     return neuron;
-}
-
-void forwardPropagation(float* input) {
-    // Set output values of first layer
-    for (size_t neuron = 0; neuron < layerSizes[0]; neuron++) {
-        layers[0].neurons[neuron].postActivation = input[neuron];
-    }
-
-    // Calculate output values for all hidden layers
-    for (size_t layer = 1; layer < nbrLayers - 1; layer++) {
-        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) {
-            layers[layer].neurons[neuron].preActivation = calculatePreActivation(layer, neuron);
-            layers[layer].neurons[neuron].postActivation = fmaxf(0.0f, layers[layer].neurons[neuron].preActivation);
-        }
-    }
-
-    // Calculate output values for last layer
-    for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++) {
-        layers[nbrLayers - 1].neurons[neuron].preActivation = calculatePreActivation(nbrLayers - 1, neuron);
-    }
-    applySoftmax(nbrLayers - 1);
-}
-
-void backwardPropagation(float* correctArray) {
-    for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++) {
-        layers[nbrLayers - 1].neurons[neuron].outputDerivative = layers[nbrLayers - 1].neurons[neuron].postActivation - correctArray[neuron];
-        updateWeightAndBiasDerivatives(nbrLayers - 1, neuron);
-        updateWeightsAndBias(nbrLayers - 1, neuron);
-    }
-
-    for (int layer = (int) nbrLayers - 2; layer >= 1; layer--) {
-        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) {
-            updateOutputDerivative(layer, neuron, correctArray);
-            updateWeightAndBiasDerivatives(layer, neuron);
-            updateWeightsAndBias(layer, neuron);
-        }
-    }
 }
 
 float calculatePreActivation(size_t layerIndex, size_t neuronIndex) {
@@ -145,4 +91,82 @@ void updateWeightsAndBias(size_t layerIndex, size_t neuronIndex) {
         layers[layerIndex].neurons[neuronIndex].weights[input] += layers[layerIndex].neurons[neuronIndex].weightDerivatives[input];
     }
     layers[layerIndex].neurons[neuronIndex].bias += layers[layerIndex].neurons[neuronIndex].biasDerivative;
+}
+
+void forwardPropagation(float* input) {
+    // Set output values of first layer
+    for (size_t neuron = 0; neuron < layerSizes[0]; neuron++) {
+        layers[0].neurons[neuron].postActivation = input[neuron];
+    }
+
+    // Calculate output values for all hidden layers
+    for (size_t layer = 1; layer < nbrLayers - 1; layer++) {
+        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) {
+            layers[layer].neurons[neuron].preActivation = calculatePreActivation(layer, neuron);
+            layers[layer].neurons[neuron].postActivation = fmaxf(0.0f, layers[layer].neurons[neuron].preActivation);
+        }
+    }
+
+    // Calculate output values for last layer
+    for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++) {
+        layers[nbrLayers - 1].neurons[neuron].preActivation = calculatePreActivation(nbrLayers - 1, neuron);
+    }
+    applySoftmax(nbrLayers - 1);
+}
+
+void backwardPropagation(float* correctArray) {
+    for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++) {
+        layers[nbrLayers - 1].neurons[neuron].outputDerivative = layers[nbrLayers - 1].neurons[neuron].postActivation - correctArray[neuron];
+        updateWeightAndBiasDerivatives(nbrLayers - 1, neuron);
+        updateWeightsAndBias(nbrLayers - 1, neuron);
+    }
+
+    for (int layer = (int) nbrLayers - 2; layer >= 1; layer--) {
+        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) {
+            updateOutputDerivative(layer, neuron, correctArray);
+            updateWeightAndBiasDerivatives(layer, neuron);
+            updateWeightsAndBias(layer, neuron);
+        }
+    }
+}
+
+void createModel() {
+    layers = new Layer[nbrLayers]();
+    layers[0].neurons = new Neuron[layerSizes[0]]();
+    for (size_t layer = 1; layer < nbrLayers; layer++) {
+        layers[layer].neurons = new Neuron[layerSizes[layer]]();
+        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) {
+            layers[layer].neurons[neuron] = createNeuron(layer);
+        }
+    }
+}
+
+void trainModel(float* input, size_t correctSuit) {
+    float* correctArray = new float[layerSizes[nbrLayers - 1]]();
+    correctArray[correctSuit] = 1.0f;
+    forwardPropagation(input);
+    
+    for (size_t layer = 1; layer < nbrLayers; layer++) {// For testing
+        std::cout << "Layer " << layer;
+        std::cout << std::endl;
+        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) { 
+            std::cout << "Pre: " << layers[layer].neurons[neuron].preActivation;
+            std::cout << std::endl;
+            std::cout << "Post: " << layers[layer].neurons[neuron].postActivation;
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+    }
+
+    backwardPropagation(correctArray);
+    delete[] correctArray;
+}
+
+float* inference(float* input) {
+    forwardPropagation(input);
+    float* prediction = new float[layerSizes[nbrLayers - 1]];
+    for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++) { 
+        prediction[neuron] = layers[nbrLayers - 1].neurons[neuron].postActivation;
+    }
+    return prediction;
 }
