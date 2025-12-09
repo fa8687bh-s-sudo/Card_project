@@ -4,8 +4,9 @@ const int N_CLASSES = 4;
 #include <Arduino_OV767X.h>
 #include <ArduinoBLE.h>
 #include <Arduino_APDS9960.h>
+#include "ble_helpers.h"
 
-const int BLEDEVICE 0 // 0 om central, 1 om peripheral
+const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
 
 // Vi använder QCIF (176x144) i gråskala – 1 byte per pixel
 #define CAM_W 176
@@ -24,6 +25,7 @@ float smallImage[SMALL_SIZE];
 #define EPOCH 50 // max number of epochs
 int epoch_count = 0; // tracks the current epoch
 
+
 void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
   for (int smallY = 0; smallY < SMALL_H; smallY++) {
     int fullY = (smallY * CAM_H) / SMALL_H; // motsvarande rad i stora bilden
@@ -41,53 +43,70 @@ void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
 
 
 void setup(){
-  Serial.println("Startar kamera...");
+  Serial.begin(115200);
+  while (!Serial) {} 
+  Serial.println("Starting camera...");
 
   // Starta kameran: QCIF-upplösning, GRAYSCALE, clock divisor 1
   if (!Camera.begin(QCIF, GRAYSCALE, 1)) {
-    Serial.println("Kunde inte initiera kameran!");
+    Serial.println("Could not start camera!");
     while (1) {
       delay(1000);
     }
   }
 
-  Serial.print("Kamera igång. Upplösning: ");
+  Serial.print("Camera started. Upplösning: ");
   Serial.print(Camera.width());
   Serial.print(" x ");
   Serial.println(Camera.height()); // borde vara 176x144
 
   if (BLEDEVICE == 0) {
-  // Central
-  // Skickar vikterna från Central till Peripheral
-    Serial.println("This is the Central Device. The central device will first get weights from the peripheral device")
+    // Central Set up
+    Serial.println("This is the Central Device. The central device will first get weights from the peripheral device");
     bleCentralSetUp();
+
+    // Hittar peripheral
     BLEDevice peripheral = connectToPeripheral(); //oklart om detta är rätt
     Serial.println("Central device connected to peripheral device");
+
+    // Hämta vikt-karaktäristiken
     BLECharacteristic peripheral_characteristic = getWeightCharacteristic(peripheral);
     Serial.println("Got weight characteristic from peripheral device");
+
+    //Läser vikter från peripheral
+    readWeightsFromCharacteristic(peripheral_characteristic);
+    Serial.println("Read weights from peripheral device");
+
     //unpacka vikterna från peripheral_characteristic och beräkna nya vikter
-    //skicka tillbaka de nya vikterna till peripheral
+    Serial.println("Calculating new weights");
+    //To do!!
 
+    // Skriv tillbaka globala vikter till peripheral
+    Serial.println("Sending updated global weights back to peripheral...");
+    writeWeightsToCharacteristic(peripheral_characteristic);;
 
-    //sendWeightsFromCentralToPeripheral(BLECharacteristic);
+    Serial.println("Central done.");
 
   } else {
-    //Peripheral
-    Serial.println("Peripheral Device")
+    //Peripheral set up
+    Serial.println("Peripheral Device");
     blePeripheralSetUp();
-    Serial.println("Peripheral device set up and waiting for central to connect");
-    
+    Serial.println("Peripheral device set up completets");
 
+    //skickar vikter till central
+    writeWeightsToCharacteristic(weightChar);
+    Serial.print("Weights have been sent from peripheral device to central device");    
   }
 }
 
  void loop(){
+  BLE.poll();
   Camera.readFrame(frame);
 
   downsampleToSmall(frame, smallImage);
 
   // Skriv ut de första 20 normaliserade pixlarna så vi ser att något händer
-  Serial.print("Normaliserade pixlar: ");
+  Serial.print("Normalized pixles: ");
     for (int i = 0; i < 20; i++) {
       Serial.print(smallImage[i], 3);  // 3 decimaler
       Serial.print(' ');
