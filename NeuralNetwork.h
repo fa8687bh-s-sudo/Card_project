@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cmath>
+#include "data.h"
 
 #define LEARNING_RATE 0.01
 
@@ -111,7 +112,7 @@ void updateWeightsAndBias(size_t layerIndex, size_t neuronIndex)
     layers[layerIndex].neurons[neuronIndex].bias += layers[layerIndex].neurons[neuronIndex].biasDerivative;
 }
 
-void forwardPropagation(float *input)
+void forwardPropagation(const float *input)
 {
     // Set output values of first layer
     for (size_t neuron = 0; neuron < layerSizes[0]; neuron++)
@@ -164,7 +165,7 @@ void createModel(float *weightsBiasArray) {
     }
 }
 
-void trainModel(float *input, size_t correctSuit) {
+void trainModel(const float *input, size_t correctSuit) {
     float *correctArray = new float[layerSizes[nbrLayers - 1]]();
     correctArray[correctSuit] = 1.0f;
     forwardPropagation(input);
@@ -184,6 +185,12 @@ void trainModel(float *input, size_t correctSuit) {
 
     backwardPropagation(correctArray);
     delete[] correctArray;
+}
+
+void trainModelAllImages(){
+    for(int i = 0; i < NUM_TRAIN_SAMPLES; i++) {
+        trainModel(trainImages[i], trainLabels[i]);
+    }
 }
 
 float *inference(float *input) {
@@ -240,3 +247,5 @@ void averageWeights() {
         }
     }
 }
+
+
