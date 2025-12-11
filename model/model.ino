@@ -1,8 +1,7 @@
 const int N_CLASSES = 4;
 
-const int MAX_PARAMS = 512;          // eller vad som krävs för alla W + b
+const int MAX_PARAMS = 6000;          // eller vad som krävs för alla W + b
 float weightsAndBias[MAX_PARAMS];    // samma som du redan använder
-int numParams = 0;                   // antal floats som är ifyllda
 
 
 #include <Arduino.h>
@@ -10,6 +9,8 @@ int numParams = 0;                   // antal floats som är ifyllda
 #include <ArduinoBLE.h>
 #include <Arduino_APDS9960.h>
 #include "ble_helpers.h"
+#include "NeuralNetwork.h"
+#include "data.h" // CHANGE THIS FILE TO GET CENTRAL OR PERIPHERAL DATASET
 
 const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
 
@@ -49,6 +50,18 @@ void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
 void setup(){
   Serial.begin(115200);
   while (!Serial) {} 
+
+  createModel(weightsAndBias);
+  for(int i = 0; i < EPOCH; i++){
+    trainModelAllImages();
+    epoch_count++;
+  }
+
+  // Use validation data to get accuracy beofre federated learning
+  float accBefore = calculateAccuracy();
+  Serial.print("Val accuracy before FL: ");
+  Serial.println(accBefore);
+
   Serial.println("Starting camera...");
 
   // Starta kameran: QCIF-upplösning, GRAYSCALE, clock divisor 1
@@ -91,6 +104,8 @@ void setup(){
 
     Serial.println("Central done.");
 
+   
+
   } else {
     //Peripheral set up
     Serial.println("Peripheral Device");
@@ -105,6 +120,11 @@ void setup(){
     writeWeightsToCharacteristic(weightChar);
     Serial.print("Weights have been sent from peripheral device to central device");    
   }
+
+  // Use validation data to get accuracy after federated learning
+  float accAfter = calculateAccuracy();
+  Serial.print("Val accuracy after FL: ");
+  Serial.println(accAfter);
 }
 
  void loop(){
@@ -112,6 +132,9 @@ void setup(){
   Camera.readFrame(frame);
 
   downsampleToSmall(frame, smallImage);
+  float* prediction = inference(smallImage);
+  // TODO: Gör något här med resultatet
+  delete[] prediction;
 
   // Skriv ut de första 20 normaliserade pixlarna så vi ser att något händer
   Serial.print("Normalized pixles: ");

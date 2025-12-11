@@ -4,6 +4,9 @@
 
 #define LEARNING_RATE 0.01
 
+float *weightsAndBiasStorage = nullptr;
+int numParams = 0;
+
 struct Neuron
 {
     float *weights;
@@ -21,7 +24,7 @@ struct Layer
 };
 
 Layer *layers = nullptr;
-size_t layerSizes[] = {784, 50, 10};
+size_t layerSizes[] = {576, 10, 4}; // 24x24 image
 size_t nbrLayers = sizeof(layerSizes) / sizeof(layerSizes[0]);
 
 Neuron createNeuron(size_t layerIndex)
@@ -154,7 +157,7 @@ void backwardPropagation(float *correctArray) {
 }
 
 void createModel(float *weightsBiasArray) {
-    weightsAndBias = weightsBiasArray;
+    weightsAndBiasStorage = weightsBiasArray;
     layers = new Layer[nbrLayers]();
     layers[0].neurons = new Neuron[layerSizes[0]]();
     for (size_t layer = 1; layer < nbrLayers; layer++) {
@@ -193,25 +196,50 @@ void trainModelAllImages(){
     }
 }
 
-float *inference(float *input) {
+float* inference(const float* input) {
     forwardPropagation(input);
-    float *prediction = new float[layerSizes[nbrLayers - 1]];
-    for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++)
-    {
+    float* prediction = new float[layerSizes[nbrLayers - 1]];
+    for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++){
         prediction[neuron] = layers[nbrLayers - 1].neurons[neuron].postActivation;
     }
     return prediction;
 }
 
+// Uses validation data and inference() method. 
+float calculateAccuracy(){
+    size_t correctAnswers  = 0;
+
+    for(size_t i = 0; i < NUM_VAL_SAMPLES; i++) {
+        float* prediction = inference(valImages[i]);
+        float tempMax =  -1.0f;
+        size_t tempIndex = 0;
+
+        for(size_t j = 0; j < layerSizes[nbrLayers-1]; j++) {
+            if(prediction[j] > tempMax) {
+                tempMax = prediction[j];
+                tempIndex = j;
+            }
+        }
+        size_t pred = tempIndex;
+        size_t label = valLabels[i];
+        if(pred == label) {
+            correctAnswers++;
+        }
+        delete[] prediction;
+    }
+    float accuracy = 1.0f * correctAnswers / NUM_VAL_SAMPLES;
+    return accuracy;
+}
+
 void packWeights() {
     int counter = 0;
-    for (int layer = 1; layer < nbrLayers; layer++) {
+    for (size_t layer = 1; layer < nbrLayers; layer++) {
         for (int neuron = 0; neuron < layerSizes[layer]; neuron++) {
-            for (int i = 0; i < layerSizes[layer - 1]; i++) {
-                weightsAndBias[counter] = layers[layer].neurons[neuron].weights[i];
+            for (size_t i = 0; i < layerSizes[layer - 1]; i++) {
+                weightsAndBiasStorage[counter] = layers[layer].neurons[neuron].weights[i];
                 counter++;
             }
-            weightsAndBias[counter] = layers[layer].neurons[neuron].bias;
+            weightsAndBiasStorage[counter] = layers[layer].neurons[neuron].bias;
             counter++;
         }
     }
@@ -219,30 +247,30 @@ void packWeights() {
 }
 
 void unpackWeights() {
-    int counter = 0;
-    for (int layer = 1; layer < nbrLayers; layer++) {
-        for (int neuron = 0; neuron < layerSizes[layer]; neuron++) {
-            for (int i = 0; i < layerSizes[layer - 1]; i++) {
-                layers[layer].neurons[neuron].weights[i] = weightsAndBias[counter];
+    size_t counter = 0;
+    for (size_t layer = 1; layer < nbrLayers; layer++) {
+        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) {
+            for (size_t i = 0; i < layerSizes[layer - 1]; i++) {
+                layers[layer].neurons[neuron].weights[i] = weightsAndBiasStorage[counter];
                 counter++;
             }
-            layers[layer].neurons[neuron].bias = weightsAndBias[counter];
+            layers[layer].neurons[neuron].bias = weightsAndBiasStorage[counter];
             counter++;
         }
     }
 }
 
 void averageWeights() {
-    int counter = 0;
-    for (int layer = 1; layer < nbrLayers; layer++) {
-        for (int neuron = 0; neuron < layerSizes[layer]; neuron++) {
-            for (int i = 0; i < layerSizes[layer - 1]; i++) {
-                layers[layer].neurons[neuron].weights[i] = (weightsAndBias[counter] + layers[layer].neurons[neuron].weights[i]) / 2.0;
-                weightsAndBias[counter] = layers[layer].neurons[neuron].weights[i];
+    size_t counter = 0;
+    for (size_t layer = 1; layer < nbrLayers; layer++) {
+        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++) {
+            for (size_t i = 0; i < layerSizes[layer - 1]; i++) {
+                layers[layer].neurons[neuron].weights[i] = (weightsAndBiasStorage[counter] + layers[layer].neurons[neuron].weights[i]) / 2.0;
+                weightsAndBiasStorage[counter] = layers[layer].neurons[neuron].weights[i];
                 counter++;
             }
-            layers[layer].neurons[neuron].bias = (weightsAndBias[counter] + layers[layer].neurons[neuron].bias) / 2.0;
-            weightsAndBias[counter] = layers[layer].neurons[neuron].bias;
+            layers[layer].neurons[neuron].bias = (weightsAndBiasStorage[counter] + layers[layer].neurons[neuron].bias) / 2.0;
+            weightsAndBiasStorage[counter] = layers[layer].neurons[neuron].bias;
             counter++;
         }
     }
