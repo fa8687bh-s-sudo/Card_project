@@ -1,5 +1,10 @@
 const int N_CLASSES = 4;
 
+const int MAX_PARAMS = 512;          // eller vad som krävs för alla W + b
+float weightsAndBias[MAX_PARAMS];    // samma som du redan använder
+int numParams = 0;                   // antal floats som är ifyllda
+
+
 #include <Arduino.h>
 #include <Arduino_OV767X.h>
 #include <ArduinoBLE.h>
@@ -24,7 +29,6 @@ float smallImage[SMALL_SIZE];
 
 #define EPOCH 50 // max number of epochs
 int epoch_count = 0; // tracks the current epoch
-
 
 void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
   for (int smallY = 0; smallY < SMALL_H; smallY++) {
@@ -77,9 +81,9 @@ void setup(){
     readWeightsFromCharacteristic(peripheral_characteristic);
     Serial.println("Read weights from peripheral device");
 
-    //unpacka vikterna från peripheral_characteristic och beräkna nya vikter
+    //beräkna nya vikter utifrån peripheral
     Serial.println("Calculating new weights");
-    //To do!!
+    averageWeights();
 
     // Skriv tillbaka globala vikter till peripheral
     Serial.println("Sending updated global weights back to peripheral...");
@@ -92,6 +96,10 @@ void setup(){
     Serial.println("Peripheral Device");
     blePeripheralSetUp();
     Serial.println("Peripheral device set up completets");
+
+    //Packar vikter
+    Serial.println("Packing weights ...");
+    packWeights();
 
     //skickar vikter till central
     writeWeightsToCharacteristic(weightChar);

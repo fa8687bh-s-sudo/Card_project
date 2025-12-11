@@ -2,7 +2,7 @@
 #include <ArduinoBLE.h>
 #include <Arduino.h>
 
-// This file contains helper methods for Bluetooth® Low Energy (BLE) communication.
+// This file contains helper methods for Bluetooth Low Energy (BLE) communication.
 // It provides setup functions for central and peripheral roles, helpers to
 // connect to a peripheral and retrieve a characteristic, and a function to
 // send weight data from the central to the peripheral
@@ -62,9 +62,6 @@ void bleCentralSetUp() {
  * @brief Set up the device as a BLE peripheral.
  */
 void blePeripheralSetUp() {
-  Serial.begin(115200);
-  while (!Serial) {}
-
   if (!BLE.begin()) {
     Serial.println("BLE start fail");
     while (1);
@@ -133,26 +130,21 @@ BLECharacteristic getWeightCharacteristic(BLEDevice peripheral) {
 }
 
 /**
- * @brief Write the current weights[] buffer to the given BLE characteristic.
- *
- * Can be used by:
- *  - the central (to send global weights to a peripheral)
- *  - the peripheral (to publish locally trained weights)
+ * @brief Write the current weights to the given BLE characteristic.
  */
 void writeWeightsToCharacteristic(BLECharacteristic& chr) {
-  if (numWeightsUsed <= 0 || numWeightsUsed > MAX_WEIGHTS) {
-    Serial.println("Invalid numWeightsUsed, cannot send weights.");
+  if (numParams <= 0 || numParams > MAX_PARAMS) {
+    Serial.println("Invalid numParams, cannot send weights.");
     return;
   }
 
-  bool ok = chr.writeValue(weights, numWeightsUsed);
+  int numBytes = numParams * sizeof(float);
+
+  bool ok = chr.writeValue((uint8_t*)weightsAndBias, numBytes);
   if (ok) {
-    Serial.print("Sent weights: ");
-    for (int i = 0; i < numWeightsUsed; i++) {
-      Serial.print(weights[i]);
-      Serial.print(' ');
-    }
-    Serial.println();
+    Serial.print("Sent ");
+    Serial.print(numParams);
+    Serial.println(" params via BLE.");
   } else {
     Serial.println("Could not send weights");
   }
@@ -160,45 +152,25 @@ void writeWeightsToCharacteristic(BLECharacteristic& chr) {
 
 
 /**
- * @brief Read weight data from a BLE characteristic into the global weights[] buffer.
- *
- * Typically used by the central device to fetch:
- *  - initial weights from a peripheral client, or
- *  - updated, locally trained weights from a peripheral.
- *
- * After reading:
- *  - The weights are stored in the global `weights[]`
- *  - The number of bytes read is stored in `numWeightsUsed`
- *
- * @param chr  Reference to the BLE characteristic on the remote device.
- * @return int Number of bytes read (same as numWeightsUsed). Returns 0 on failure.
+ * @brief Read weight data from a BLE characteristic
  */
 int readWeightsFromCharacteristic(BLECharacteristic& chr) {
-  uint8_t buffer[MAX_WEIGHTS];
+  int maxBytes = MAX_PARAMS * sizeof(float);
 
-  // Try to read up to MAX_WEIGHTS bytes
-  int len = chr.readValue(buffer, MAX_WEIGHTS);
+  int len = chr.readValue((uint8_t*)weightsAndBias, maxBytes);
 
   if (len <= 0) {
     Serial.println("Failed to read weights from characteristic.");
-    numWeightsUsed = 0;
+    numParams = 0;
     return 0;
   }
 
-  // Store values in global array
-  numWeightsUsed = len;
-  for (int i = 0; i < len; i++) {
-    weights[i] = buffer[i];
-  }
+  numParams = len / sizeof(float);
 
-  // Debug print
-  Serial.print("Read weights: ");
-  for (int i = 0; i < numWeightsUsed; i++) {
-    Serial.print(weights[i]);
-    Serial.print(' ');
-  }
-  Serial.println();
+  Serial.print("Read ");
+  Serial.print(numParams);
+  Serial.println(" params from BLE.");
 
-  return len;
+  return numParams;
 }
 

@@ -23,8 +23,6 @@ Layer *layers = nullptr;
 size_t layerSizes[] = {784, 50, 10};
 size_t nbrLayers = sizeof(layerSizes) / sizeof(layerSizes[0]);
 
-float *weightsAndBias = NULL;
-
 Neuron createNeuron(size_t layerIndex)
 {
     Neuron neuron;
@@ -210,6 +208,7 @@ void packWeights() {
             counter++;
         }
     }
+    numParams = counter;
 }
 
 void unpackWeights() {
