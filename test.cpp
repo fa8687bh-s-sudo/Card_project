@@ -2,19 +2,18 @@
 #include "NeuralNetwork.h"
 #include "data.h"
 
-
+float *weightsBiasArray = nullptr;
 
 void setup() {
+   
+    weightsBiasArray = new float[numParams];
     
-    float* trainData = createMnistDigit0Version1();
-    printMnistDigit(trainData);
-    createModel();
+    createModel(weightsBiasArray);
     // Training epochs
     for (size_t i = 0; i < 10; i++) {
         trainModel(trainData, 0);
     }
 
-    float* testData = createMnistDigit0Version2();
     float* prediction = inference(testData);
     for (size_t i = 0; i < 10; i++) {
         std::cout << prediction[i];
