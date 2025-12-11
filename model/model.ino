@@ -1,8 +1,5 @@
 const int N_CLASSES = 4;
 
-const int MAX_PARAMS = 6000;          // eller vad som krävs för alla W + b
-float weightsAndBias[MAX_PARAMS];    // samma som du redan använder
-
 
 #include <Arduino.h>
 #include <Arduino_OV767X.h>
@@ -10,7 +7,7 @@ float weightsAndBias[MAX_PARAMS];    // samma som du redan använder
 #include <Arduino_APDS9960.h>
 #include "ble_helpers.h"
 #include "NeuralNetwork.h"
-#include "data.h" // CHANGE THIS FILE TO GET CENTRAL OR PERIPHERAL DATASET
+
 
 const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
 
@@ -21,8 +18,8 @@ const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
 // Buffer där hela kamerabilden hamnar (176 * 144 bytes)
 uint8_t frame[CAM_W * CAM_H];
 
-#define SMALL_W 24
-#define SMALL_H 24
+#define SMALL_W resolution
+#define SMALL_H resolution
 #define SMALL_SIZE (SMALL_W * SMALL_H)
 
 // Den nedskalade, normaliserade bilden (24x24 => 576 float-värden)
@@ -50,9 +47,11 @@ void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
 void setup(){
   Serial.begin(115200);
   while (!Serial) {} 
-
+  Serial.println("Create Model");
   createModel(weightsAndBias);
   for(int i = 0; i < EPOCH; i++){
+    Serial.print("Training epoch ");
+    Serial.println(epoch_count);
     trainModelAllImages();
     epoch_count++;
   }
@@ -62,20 +61,6 @@ void setup(){
   Serial.print("Val accuracy before FL: ");
   Serial.println(accBefore);
 
-  Serial.println("Starting camera...");
-
-  // Starta kameran: QCIF-upplösning, GRAYSCALE, clock divisor 1
-  if (!Camera.begin(QCIF, GRAYSCALE, 1)) {
-    Serial.println("Could not start camera!");
-    while (1) {
-      delay(1000);
-    }
-  }
-
-  Serial.print("Camera started. Upplösning: ");
-  Serial.print(Camera.width());
-  Serial.print(" x ");
-  Serial.println(Camera.height()); // borde vara 176x144
 
   if (BLEDEVICE == 0) {
     // Central Set up
@@ -125,6 +110,22 @@ void setup(){
   float accAfter = calculateAccuracy();
   Serial.print("Val accuracy after FL: ");
   Serial.println(accAfter);
+
+
+  Serial.println("Starting camera...");
+
+  // Starta kameran: QCIF-upplösning, GRAYSCALE, clock divisor 1
+  if (!Camera.begin(QCIF, GRAYSCALE, 1)) {
+    Serial.println("Could not start camera!");
+    while (1) {
+      delay(1000);
+    }
+  }
+
+  Serial.print("Camera started. Upplösning: ");
+  Serial.print(Camera.width());
+  Serial.print(" x ");
+  Serial.println(Camera.height()); // borde vara 176x144
 }
 
  void loop(){

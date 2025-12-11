@@ -1,6 +1,8 @@
 #pragma once
 #include <ArduinoBLE.h>
 #include <Arduino.h>
+#include "NeuralNetwork.h"
+
 
 // This file contains helper methods for Bluetooth Low Energy (BLE) communication.
 // It provides setup functions for central and peripheral roles, helpers to
@@ -20,6 +22,7 @@ const char* weightCharUuid    = "19b10001-e8f2-537e-4f6c-d104768a1214";
 // OBS denna ska ändras när vi vet vikterna!
 
 const int MAX_WEIGHTS = 256;
+float weightsAndBias[MAX_PARAMS]; 
 
 BLECharacteristic weightChar(
   weightCharUuid,

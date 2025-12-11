@@ -1,14 +1,18 @@
+#pragma once
 #include <cstddef>
 #include <cmath>
-#include "data.h"
+#include "data.h" 
+#include <Arduino.h>
 
 #define LEARNING_RATE 0.01
 
 float *weightsAndBiasStorage = nullptr;
 int numParams = 0;
+const size_t resolution = 24; 
+size_t calculateMaxParam();
+const size_t MAX_PARAMS = 6000; 
 
-struct Neuron
-{
+struct Neuron{
     float *weights;
     float bias;
     float preActivation;
@@ -18,13 +22,12 @@ struct Neuron
     float outputDerivative;
 };
 
-struct Layer
-{
+struct Layer {
     Neuron *neurons;
 };
 
 Layer *layers = nullptr;
-size_t layerSizes[] = {576, 10, 4}; // 24x24 image
+size_t layerSizes[] = {resolution * resolution, 10, 4}; // 24x24 image
 size_t nbrLayers = sizeof(layerSizes) / sizeof(layerSizes[0]);
 
 Neuron createNeuron(size_t layerIndex)
@@ -34,11 +37,11 @@ Neuron createNeuron(size_t layerIndex)
     neuron.weightDerivatives = new float[layerSizes[layerIndex - 1]]();
     for (size_t input = 0; input < layerSizes[layerIndex - 1]; input++)
     {
-        neuron.weights[input] = (rand() * 1.0 / RAND_MAX - 0.5) * 2;
-        // neuron.weights[input] = (float) random(-1000, 1000) / 1000.0; // Check if this works on Arduino, otherwise change
+        // neuron.weights[input] = (rand() * 1.0 / RAND_MAX - 0.5) * 2; Old???
+        neuron.weights[input] = (float) random(-1000, 1000) / 1000.0; // 
     }
-    neuron.bias = (rand() * 1.0 / RAND_MAX - 0.5) * 2;
-    // neuron.bias = (float) random(-1000, 1000) / 1000.0; // Check if this works on Arduino, otherwise change
+    // neuron.bias = (rand() * 1.0 / RAND_MAX - 0.5) * 2; OLD??
+    neuron.bias = (float) random(-1000, 1000) / 1000.0; 
     return neuron;
 }
 
@@ -95,8 +98,7 @@ void updateOutputDerivative(size_t layerIndex, size_t neuronIndex, float *correc
     layers[layerIndex].neurons[neuronIndex].outputDerivative = sum;
 }
 
-void updateWeightAndBiasDerivatives(size_t layerIndex, size_t neuronIndex)
-{
+void updateWeightAndBiasDerivatives(size_t layerIndex, size_t neuronIndex) {
     size_t nbrInputs = layerSizes[layerIndex - 1];
     for (size_t input = 0; input < nbrInputs; input++)
     {
@@ -105,8 +107,7 @@ void updateWeightAndBiasDerivatives(size_t layerIndex, size_t neuronIndex)
     layers[layerIndex].neurons[neuronIndex].biasDerivative = -LEARNING_RATE * layers[layerIndex].neurons[neuronIndex].outputDerivative;
 }
 
-void updateWeightsAndBias(size_t layerIndex, size_t neuronIndex)
-{
+void updateWeightsAndBias(size_t layerIndex, size_t neuronIndex){
     size_t nbrInputs = layerSizes[layerIndex - 1];
     for (size_t input = 0; input < nbrInputs; input++)
     {
@@ -172,20 +173,6 @@ void trainModel(const float *input, size_t correctSuit) {
     float *correctArray = new float[layerSizes[nbrLayers - 1]]();
     correctArray[correctSuit] = 1.0f;
     forwardPropagation(input);
-
-    for (size_t layer = 1; layer < nbrLayers; layer++) { // For testing
-        std::cout << "Layer " << layer;
-        std::cout << std::endl;
-        for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++)
-        {
-            std::cout << "Pre: " << layers[layer].neurons[neuron].preActivation;
-            std::cout << std::endl;
-            std::cout << "Post: " << layers[layer].neurons[neuron].postActivation;
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-    }
-
     backwardPropagation(correctArray);
     delete[] correctArray;
 }
@@ -221,7 +208,11 @@ float calculateAccuracy(){
             }
         }
         size_t pred = tempIndex;
+        Serial.print("PREDICTION: ");
+        Serial.println(pred);
         size_t label = valLabels[i];
+        Serial.print("CORRECT: ");
+        Serial.println(label);
         if(pred == label) {
             correctAnswers++;
         }
@@ -274,6 +265,14 @@ void averageWeights() {
             counter++;
         }
     }
+}
+
+size_t calculateMaxParam() {
+  size_t MAX_PARAMS = 0;        
+  for(size_t i = 0; i < nbrLayers-1; i++) {
+    MAX_PARAMS += (layerSizes[i]+1)*(layerSizes[i+1]);
+  }
+  return MAX_PARAMS;
 }
 
 
