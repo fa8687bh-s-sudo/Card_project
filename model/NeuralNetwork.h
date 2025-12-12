@@ -4,7 +4,7 @@
 #include "data.h" 
 #include <Arduino.h>
 
-#define LEARNING_RATE 0.01
+#define LEARNING_RATE 0.001
 
 float *weightsAndBiasStorage = nullptr;
 int numParams = 0;
@@ -116,12 +116,11 @@ void updateWeightsAndBias(size_t layerIndex, size_t neuronIndex){
     layers[layerIndex].neurons[neuronIndex].bias += layers[layerIndex].neurons[neuronIndex].biasDerivative;
 }
 
-void forwardPropagation(const float *input)
-{
+void forwardPropagation(const uint8_t *input){
     // Set output values of first layer
     for (size_t neuron = 0; neuron < layerSizes[0]; neuron++)
     {
-        layers[0].neurons[neuron].postActivation = input[neuron];
+        layers[0].neurons[neuron].postActivation = input[neuron] / 255.0f;
     }
 
     // Calculate output values for all hidden layers
@@ -169,7 +168,7 @@ void createModel(float *weightsBiasArray) {
     }
 }
 
-void trainModel(const float *input, size_t correctSuit) {
+void trainModel(const uint8_t *input, size_t correctSuit) {
     float *correctArray = new float[layerSizes[nbrLayers - 1]]();
     correctArray[correctSuit] = 1.0f;
     forwardPropagation(input);
@@ -178,16 +177,26 @@ void trainModel(const float *input, size_t correctSuit) {
 }
 
 void trainModelAllImages(){
-    for(int i = 0; i < NUM_TRAIN_SAMPLES; i++) {
+    for(int i = 0; i < NBR_TRAIN_IMAGES; i++) {
         trainModel(trainImages[i], trainLabels[i]);
     }
 }
 
-float* inference(const float* input) {
+float* inference(const uint8_t* input) {
     forwardPropagation(input);
+    // for (int i = 0; i < resolution * resolution ; i++){
+    //    Serial.println("Input: ");
+    //    Serial.println(input[i]);
+    //}
+
     float* prediction = new float[layerSizes[nbrLayers - 1]];
     for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++){
         prediction[neuron] = layers[nbrLayers - 1].neurons[neuron].postActivation;
+        Serial.println("Prediction: ");
+        Serial.print(neuron);
+        Serial.print(" ");
+        Serial.print(prediction[neuron]);
+
     }
     return prediction;
 }
@@ -196,7 +205,7 @@ float* inference(const float* input) {
 float calculateAccuracy(){
     size_t correctAnswers  = 0;
 
-    for(size_t i = 0; i < NUM_VAL_SAMPLES; i++) {
+    for(size_t i = 0; i < NBR_VAL_IMAGES; i++) {
         float* prediction = inference(valImages[i]);
         float tempMax =  -1.0f;
         size_t tempIndex = 0;
@@ -218,7 +227,7 @@ float calculateAccuracy(){
         }
         delete[] prediction;
     }
-    float accuracy = 1.0f * correctAnswers / NUM_VAL_SAMPLES;
+    float accuracy = 1.0f * correctAnswers / NBR_VAL_IMAGES;
     return accuracy;
 }
 

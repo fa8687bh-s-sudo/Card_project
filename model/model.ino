@@ -23,12 +23,12 @@ uint8_t frame[CAM_W * CAM_H];
 #define SMALL_SIZE (SMALL_W * SMALL_H)
 
 // Den nedskalade, normaliserade bilden (24x24 => 576 float-värden)
-float smallImage[SMALL_SIZE];
+uint8_t smallImage[SMALL_SIZE];
 
-#define EPOCH 50 // max number of epochs
+#define EPOCH 10 // max number of epochs
 int epoch_count = 0; // tracks the current epoch
 
-void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
+void downsampleToSmall(const uint8_t* fullImage, uint8_t* smallImage) {
   for (int smallY = 0; smallY < SMALL_H; smallY++) {
     int fullY = (smallY * CAM_H) / SMALL_H; // motsvarande rad i stora bilden
     
@@ -38,7 +38,7 @@ void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
       int fullIndex  = fullY  * CAM_W  + fullX;
       int smallIndex = smallY * SMALL_W + smallX;
       // normalisera 0..255 → 0..1
-      smallImage[smallIndex] = fullImage[fullIndex] / 255.0f;
+      smallImage[smallIndex] = fullImage[fullIndex];
     }
   }
 }

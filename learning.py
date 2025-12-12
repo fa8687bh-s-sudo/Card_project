@@ -3,15 +3,30 @@ from pathlib import Path
 from PIL import Image
 
 # the number of for example "five of spades" images that are included in training data
-TRAIN_CARDS_PER_CLASS = 8
-VAL_CARDS_PER_CLASS = 2
-TEST_CARDS_PER_CLASS = 2
+TRAIN_CARDS_PER_CLASS = 2
+VAL_CARDS_PER_CLASS = 1
+TEST_CARDS_PER_CLASS = 0
 
 # säkerställ så alla bilder är i samma format
 def load_image(path, size=(24, 24)):
-    img = Image.open(path).convert("L")
-    img = img.resize(size)
-    return np.array(img) / 255.0
+    im = Image.open(path).convert("L")
+
+    # Size of the image in pixels (size of original image)
+    # (This is not mandatory)
+    width, height = im.size
+
+    # Setting the points for cropped image
+    left = 1
+    top = 1
+    right = width / 2
+    bottom = height / 2
+
+    # Cropped image of above dimension
+    # (It will not change original image)
+    #img = im.crop((left, top, right, bottom))
+
+    im1 = img.resize(size)
+    return np.array(im1) / 255.0
 
 # alla träningsdata
 data_path_train = Path("dataset/train")
@@ -168,15 +183,15 @@ def createFileAsString(images, labels, data_group):
 
 flat_train_images = images.reshape(images.shape[0], images.shape[1]*images.shape[2])
 flat_val_images = val_images.reshape(val_images.shape[0], val_images.shape[1]*val_images.shape[2])
-flat_test_images = test_images.reshape(test_images.shape[0], test_images.shape[1]*test_images.shape[2])
+#flat_test_images = test_images.reshape(test_images.shape[0], test_images.shape[1]*test_images.shape[2])
 
 with open("data.h", "w") as file:
     file.write("#define NUM_TRAIN_SAMPLES " + str(flat_train_images.shape[0]) + "\n")
     file.write("#define NUM_VAL_SAMPLES " + str(flat_val_images.shape[0]) + "\n")
-    file.write("#define NUM_TEST_SAMPLES " + str(flat_test_images.shape[0]) + "\n")
+    #file.write("#define NUM_TEST_SAMPLES " + str(flat_test_images.shape[0]) + "\n")
     file.write(createFileAsString(flat_train_images, suit_labels, "train"))
     file.write(createFileAsString(flat_val_images, val_suit_labels, "val"))
-    file.write(createFileAsString(flat_test_images, test_suit_labels, "test"))
+    #file.write(createFileAsString(flat_test_images, test_suit_labels, "test"))
 
 
 # write_data_to_cpp("data.h", flat_train_images, suit_labels, "train")
