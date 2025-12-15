@@ -6,7 +6,7 @@ from PIL import Image, ImageOps
 
 DATA_PATH = Path("dataset")
 CLASSES = ("diamonds", "clubs", "hearts", "spades")
-RESOLUTION = 64 # Images get resized to RESOLUTION x RESOLUTION pixels
+RESOLUTION = 128 # Images get resized to RESOLUTION x RESOLUTION pixels
 WHITE_THRESHOLD = 170 # The grayscale pixel value needed to qualify as white
 TRAINING_RATIO = 0.8 # The ratio of the data that is used for training (the rest is used for validation)
 
@@ -102,5 +102,6 @@ images, labels = load_images()
 train_images, train_labels, val_images, val_labels = train_val_split(images, labels)
 train_data_string = create_file_content(train_images, train_labels, "train")
 val_data_string = create_file_content(val_images, val_labels, "val")
-definitions = f"#define NBR_TRAIN_IMAGES {train_images.shape[0]}\n#define NBR_VAL_IMAGES {val_images.shape[0]}\n"
-write_to_file((definitions, train_data_string, val_data_string))
+include = "#include <cstdint>\n"
+definitions = f"\n#define NBR_TRAIN_IMAGES {train_images.shape[0]}\n#define NBR_VAL_IMAGES {val_images.shape[0]}\n"
+write_to_file((include, definitions, train_data_string, val_data_string))
