@@ -78,7 +78,8 @@ void setup(){
     Serial.println("Got weight characteristic from peripheral device");
 
     //Läser vikter från peripheral
-    readWeightsFromCharacteristic(peripheral_characteristic);
+    //readWeightsFromCharacteristic(peripheral_characteristic);
+    readWeightsChunked(peripheral_characteristic);
     Serial.println("Read weights from peripheral device");
 
     //beräkna nya vikter utifrån peripheral
@@ -87,7 +88,8 @@ void setup(){
 
     // Skriv tillbaka globala vikter till peripheral
     Serial.println("Sending updated global weights back to peripheral...");
-    writeWeightsToCharacteristic(peripheral_characteristic);
+    //writeWeightsToCharacteristic(peripheral_characteristic);
+    writeWeightsChunked(peripheral_characteristic);
     blePrint("Peripheral has recieved new calculated weights from central");
 
     Serial.println("Central done.");
@@ -106,7 +108,8 @@ void setup(){
     BLE.advertise();
 
     //skickar vikter till central
-    writeWeightsToCharacteristic(weightChar);
+    //writeWeightsToCharacteristic(weightChar);
+    writeWeightsChunked(weightChar);
     Serial.print("Weights have been sent from peripheral device to central device");    
   }
 

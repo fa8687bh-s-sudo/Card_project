@@ -202,3 +202,90 @@ void blePrint(const char* text) {
 }
 
 
+// ==================== CHUNKED SEND / RECEIVE ====================
+// Skicka vikter i små bitar (chunks) eftersom BLE bara klarar ~244 bytes per write
+
+void writeWeightsChunked(BLECharacteristic& chr) {
+  if (numParams <= 0) {
+    Serial.println("writeWeightsChunked: no params");
+    return;
+  }
+
+  int totalBytes = numParams * sizeof(float);
+  uint8_t* bytes = (uint8_t*)weightsAndBias;
+
+  const int CHUNK_BYTES = 200;     // något under max (~244)
+
+  Serial.print("Chunked sending ");
+  Serial.print(totalBytes);
+  Serial.println(" bytes...");
+
+  // Skriv först hur många bytes det totalt gäller (header)
+  chr.writeValue((uint8_t*)&totalBytes, sizeof(int));
+  delay(20);
+
+  for (int offset = 0; offset < totalBytes; offset += CHUNK_BYTES) {
+    int thisLen = min(CHUNK_BYTES, totalBytes - offset);
+
+    bool ok = chr.writeValue(bytes + offset, thisLen);
+    if (!ok) {
+      Serial.print("Chunk write failed at offset ");
+      Serial.println(offset);
+      return;
+    }
+
+    delay(10); // ge BLE-stack tid
+  }
+
+  Serial.println("Chunked sending done!");
+}
+
+
+int readWeightsChunked(BLECharacteristic& chr) {
+  // 1) Läs hur många bytes vi ska ta emot
+  int totalBytes = 0;
+  int len = chr.readValue((uint8_t*)&totalBytes, sizeof(int));
+  if (len != sizeof(int)) {
+    Serial.println("readWeightsChunked: failed to read header.");
+    return 0;
+  }
+
+  Serial.print("Expecting ");
+  Serial.print(totalBytes);
+  Serial.println(" bytes total.");
+
+  int expectedParams = totalBytes / sizeof(float);
+  if (expectedParams > MAX_PARAMS) {
+    Serial.println("Too many params in chunked read!");
+    return 0;
+  }
+
+  uint8_t* bytes = (uint8_t*)weightsAndBias;
+
+  const int CHUNK_BYTES = 200;
+
+  int received = 0;
+
+  while (received < totalBytes) {
+    int toRead = min(CHUNK_BYTES, totalBytes - received);
+
+    int got = chr.readValue(bytes + received, toRead);
+    if (got <= 0) {
+      Serial.println("readWeightsChunked: failed mid-way");
+      return 0;
+    }
+
+    received += got;
+    delay(10);
+  }
+
+  numParams = expectedParams;
+
+  Serial.print("Chunked read complete. Received params = ");
+  Serial.println(numParams);
+
+  return numParams;
+}
+
+
+
