@@ -93,7 +93,7 @@ def create_file_content(images, labels, data_group):
     return content
 
 def write_to_file(content_tuple):
-    with open("data.h", "w") as file:
+    with open("model/data.h", "w") as file:
         for content in content_tuple:
             file.write(content)
 
