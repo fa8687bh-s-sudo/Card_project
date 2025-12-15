@@ -19,10 +19,18 @@ def file_to_bits(image):
 
 
 def visualise_images(images):
+    if not isinstance(images, (list, tuple)):
+        images = [images]
+
     for image in images:
+        image = np.array(image, dtype=np.uint8)
+        bits = np.unpackbits(image)[:RESOLUTION*RESOLUTION]
+        image = bits.reshape((RESOLUTION, RESOLUTION))
+        
         plt.figure()
         plt.imshow(image, cmap='gray', vmin=0, vmax=1)
-        plt.axis('off') 
+        plt.axis('off')
+    
     plt.show()
 
 def bits_to_bytes(array):
