@@ -21,17 +21,27 @@ const char* weightCharUuid    = "19b10001-e8f2-537e-4f6c-d104768a1214";
 
 // OBS denna ska ändras när vi vet vikterna!
 
-const int MAX_WEIGHTS = 256;
+const int MAX_WEIGHTS = 24000;
 float weightsAndBias[MAX_PARAMS]; 
 
 BLECharacteristic weightChar(
   weightCharUuid,
   BLERead | BLEWrite,
-  MAX_WEIGHTS
+  MAX_PARAMS * sizeof(float) 
 );
 
 uint8_t weights[MAX_WEIGHTS];
 int numWeightsUsed = 0;
+
+
+// ----- To print to other device ----- 
+const char* logCharUuid       = "19b10002-e8f2-537e-4f6c-d104768a1214";
+
+BLECharacteristic logChar(
+  logCharUuid,
+  BLERead | BLENotify,
+  100
+);
 
 
 // ==================== FUNCTION DECLARATIONS ====================
@@ -42,6 +52,7 @@ BLEDevice connectToPeripheral();
 BLECharacteristic getWeightCharacteristic(BLEDevice peripheral);
 void writeWeightsToCharacteristic(BLECharacteristic& chr);
 int readWeightsFromCharacteristic(BLECharacteristic& chr);
+void blePrint(const char* text);
 
 BLEService weightService(deviceServiceUuid); //denna är jag lite osäker på
 
@@ -75,8 +86,7 @@ void blePeripheralSetUp() {
   weightService.addCharacteristic(weightChar);
   BLE.addService(weightService);
 
-  BLE.advertise();
-  Serial.println("Peripheral ready, waiting for central...");
+  Serial.println("Peripheral ready");
 }
 
 
@@ -136,12 +146,16 @@ BLECharacteristic getWeightCharacteristic(BLEDevice peripheral) {
  * @brief Write the current weights to the given BLE characteristic.
  */
 void writeWeightsToCharacteristic(BLECharacteristic& chr) {
+  Serial.println("numParams är: ");
+  Serial.print(numParams);
   if (numParams <= 0 || numParams > MAX_PARAMS) {
     Serial.println("Invalid numParams, cannot send weights.");
     return;
   }
 
   int numBytes = numParams * sizeof(float);
+  Serial.print("numBytes: ");
+  Serial.println(numBytes);
 
   bool ok = chr.writeValue((uint8_t*)weightsAndBias, numBytes);
   if (ok) {
@@ -159,8 +173,12 @@ void writeWeightsToCharacteristic(BLECharacteristic& chr) {
  */
 int readWeightsFromCharacteristic(BLECharacteristic& chr) {
   int maxBytes = MAX_PARAMS * sizeof(float);
+  Serial.print("maxBytes: ");
+  Serial.println(maxBytes);
 
   int len = chr.readValue((uint8_t*)weightsAndBias, maxBytes);
+  Serial.print("length / len: " );
+  Serial.println(len);
 
   if (len <= 0) {
     Serial.println("Failed to read weights from characteristic.");
@@ -176,4 +194,11 @@ int readWeightsFromCharacteristic(BLECharacteristic& chr) {
 
   return numParams;
 }
+
+void blePrint(const char* text) {
+  if (BLE.connected()) {
+    logChar.writeValue((const uint8_t*)text, strlen(text));
+  }
+}
+
 

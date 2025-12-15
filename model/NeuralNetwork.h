@@ -1,7 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cmath>
-#include "data.h" 
+#include "data_central.h" 
 #include <Arduino.h>
 
 #define LEARNING_RATE 0.001
@@ -192,10 +192,10 @@ float* inference(const uint8_t* input) {
     float* prediction = new float[layerSizes[nbrLayers - 1]];
     for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++){
         prediction[neuron] = layers[nbrLayers - 1].neurons[neuron].postActivation;
-        Serial.println("Prediction: ");
-        Serial.print(neuron);
-        Serial.print(" ");
-        Serial.print(prediction[neuron]);
+        //Serial.println("Prediction: ");
+        //Serial.print(neuron);
+        //erial.print(" ");
+        //Serial.print(prediction[neuron]);
 
     }
     return prediction;
@@ -244,6 +244,8 @@ void packWeights() {
         }
     }
     numParams = counter;
+    Serial.print("After packWeights, numParams = ");
+    Serial.println(numParams);
 }
 
 void unpackWeights() {
