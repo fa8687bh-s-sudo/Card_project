@@ -1,10 +1,13 @@
 const int N_CLASSES = 4;
 
+
 #include <Arduino.h>
 #include <Arduino_OV767X.h>
 #include <ArduinoBLE.h>
 #include <Arduino_APDS9960.h>
 #include "ble_helpers.h"
+#include "NeuralNetwork.h"
+
 
 const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
 
@@ -15,18 +18,17 @@ const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
 // Buffer där hela kamerabilden hamnar (176 * 144 bytes)
 uint8_t frame[CAM_W * CAM_H];
 
-#define SMALL_W 24
-#define SMALL_H 24
+#define SMALL_W resolution
+#define SMALL_H resolution
 #define SMALL_SIZE (SMALL_W * SMALL_H)
 
 // Den nedskalade, normaliserade bilden (24x24 => 576 float-värden)
-float smallImage[SMALL_SIZE];
+uint8_t smallImage[SMALL_SIZE];
 
-#define EPOCH 50 // max number of epochs
+#define EPOCH 10 // max number of epochs
 int epoch_count = 0; // tracks the current epoch
 
-
-void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
+void downsampleToSmall(const uint8_t* fullImage, uint8_t* smallImage) {
   for (int smallY = 0; smallY < SMALL_H; smallY++) {
     int fullY = (smallY * CAM_H) / SMALL_H; // motsvarande rad i stora bilden
     
@@ -36,7 +38,7 @@ void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
       int fullIndex  = fullY  * CAM_W  + fullX;
       int smallIndex = smallY * SMALL_W + smallX;
       // normalisera 0..255 → 0..1
-      smallImage[smallIndex] = fullImage[fullIndex] / 255.0f;
+      smallImage[smallIndex] = fullImage[fullIndex];
     }
   }
 }
@@ -45,20 +47,20 @@ void downsampleToSmall(const uint8_t* fullImage, float* smallImage) {
 void setup(){
   Serial.begin(115200);
   while (!Serial) {} 
-  Serial.println("Starting camera...");
-
-  // Starta kameran: QCIF-upplösning, GRAYSCALE, clock divisor 1
-  if (!Camera.begin(QCIF, GRAYSCALE, 1)) {
-    Serial.println("Could not start camera!");
-    while (1) {
-      delay(1000);
-    }
+  Serial.println("Create Model");
+  createModel(weightsAndBias);
+  for(int i = 0; i < EPOCH; i++){
+    Serial.print("Training epoch ");
+    Serial.println(epoch_count);
+    trainModelAllImages();
+    epoch_count++;
   }
 
-  Serial.print("Camera started. Upplösning: ");
-  Serial.print(Camera.width());
-  Serial.print(" x ");
-  Serial.println(Camera.height()); // borde vara 176x144
+  // Use validation data to get accuracy beofre federated learning
+  float accBefore = calculateAccuracy();
+  Serial.print("Val accuracy before FL: ");
+  Serial.println(accBefore);
+
 
   if (BLEDEVICE == 0) {
     // Central Set up
@@ -77,9 +79,9 @@ void setup(){
     readWeightsFromCharacteristic(peripheral_characteristic);
     Serial.println("Read weights from peripheral device");
 
-    //unpacka vikterna från peripheral_characteristic och beräkna nya vikter
+    //beräkna nya vikter utifrån peripheral
     Serial.println("Calculating new weights");
-    //To do!!
+    averageWeights();
 
     // Skriv tillbaka globala vikter till peripheral
     Serial.println("Sending updated global weights back to peripheral...");
@@ -87,16 +89,43 @@ void setup(){
 
     Serial.println("Central done.");
 
+   
+
   } else {
     //Peripheral set up
     Serial.println("Peripheral Device");
     blePeripheralSetUp();
     Serial.println("Peripheral device set up completets");
 
+    //Packar vikter
+    Serial.println("Packing weights ...");
+    packWeights();
+
     //skickar vikter till central
     writeWeightsToCharacteristic(weightChar);
     Serial.print("Weights have been sent from peripheral device to central device");    
   }
+
+  // Use validation data to get accuracy after federated learning
+  float accAfter = calculateAccuracy();
+  Serial.print("Val accuracy after FL: ");
+  Serial.println(accAfter);
+
+
+  Serial.println("Starting camera...");
+
+  // Starta kameran: QCIF-upplösning, GRAYSCALE, clock divisor 1
+  if (!Camera.begin(QCIF, GRAYSCALE, 1)) {
+    Serial.println("Could not start camera!");
+    while (1) {
+      delay(1000);
+    }
+  }
+
+  Serial.print("Camera started. Upplösning: ");
+  Serial.print(Camera.width());
+  Serial.print(" x ");
+  Serial.println(Camera.height()); // borde vara 176x144
 }
 
  void loop(){
@@ -104,6 +133,9 @@ void setup(){
   Camera.readFrame(frame);
 
   downsampleToSmall(frame, smallImage);
+  float* prediction = inference(smallImage);
+  // TODO: Gör något här med resultatet
+  delete[] prediction;
 
   // Skriv ut de första 20 normaliserade pixlarna så vi ser att något händer
   Serial.print("Normalized pixles: ");

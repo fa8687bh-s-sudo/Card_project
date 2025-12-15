@@ -1,20 +1,32 @@
 import numpy as np
-import tensorflow as tf
-import visualkeras
-import matplotlib.pyplot as plt
-
 from pathlib import Path
-
-from sklearn.model_selection import train_test_split
-from tinymlgen import port
 from PIL import Image
 
+# the number of for example "five of spades" images that are included in training data
+TRAIN_CARDS_PER_CLASS = 2
+VAL_CARDS_PER_CLASS = 1
+TEST_CARDS_PER_CLASS = 0
 
 # säkerställ så alla bilder är i samma format
 def load_image(path, size=(24, 24)):
-    img = Image.open(path).convert("L")
-    img = img.resize(size)
-    return np.array(img) / 255.0
+    im = Image.open(path).convert("L")
+
+    # Size of the image in pixels (size of original image)
+    # (This is not mandatory)
+    width, height = im.size
+
+    # Setting the points for cropped image
+    left = 1
+    top = 1
+    right = width / 2
+    bottom = height / 2
+
+    # Cropped image of above dimension
+    # (It will not change original image)
+    #img = im.crop((left, top, right, bottom))
+
+    im1 = img.resize(size)
+    return np.array(im1) / 255.0
 
 # alla träningsdata
 data_path_train = Path("dataset/train")
@@ -61,7 +73,9 @@ for class_name in classes:
     suit_name = get_suit(class_name)
     suit_index = suit_to_index[suit_name]
 
-    for img_path in class_folder.glob("*.jpg"):
+    for i, img_path in enumerate(class_folder.glob("*.jpg")):
+        if i >= TEST_CARDS_PER_CLASS:
+            break
         arr = load_image(img_path)
         test_images.append(arr)
         test_suit_labels.append(suit_index)
@@ -76,7 +90,9 @@ for class_name in classes:
     suit_name = get_suit(class_name)
     suit_index = suit_to_index[suit_name]
 
-    for img_path in class_folder.glob("*.jpg"):
+    for i, img_path in enumerate(class_folder.glob("*.jpg")):
+        if i >= VAL_CARDS_PER_CLASS:
+            break
         arr = load_image(img_path)
         val_images.append(arr)
         val_suit_labels.append(suit_index)
@@ -91,7 +107,10 @@ for class_name in classes:
     suit_name = get_suit(class_name)
     suit_index = suit_to_index[suit_name]
 
-    for img_path in class_folder.glob("*.jpg"):
+    
+    for i, img_path in enumerate(class_folder.glob("*.jpg")):
+        if i >= TRAIN_CARDS_PER_CLASS:
+            break
         arr = load_image(img_path)
         images.append(arr)
         suit_labels.append(suit_index)
@@ -118,15 +137,15 @@ for i, suit in enumerate(suits):
 label_to_class = {i: name for i, name in enumerate(classes)}
 
 # Skriv tränings och valideringsfil(alla bilder) i c++ format
-def write_data_to_cpp(filename, images, labels):
-    with open(filename, "w") as f:
-        f.write(f"// Data file generated from {len(images)} images\n")
-        f.write(f"#define NUM_SAMPLES {len(images)}\n")
-        f.write(f"#define IMAGE_WIDTH {images.shape[1]}\n")
-        f.write(f"#define IMAGE_HEIGHT {images.shape[2]}\n")
-        f.write(f"#define IMAGE_CHANNELS {images.shape[3]}\n\n")
+def write_data_to_cpp(filename, images, labels, data_group):
+    with open(filename, "a") as f:
+        # f.write(f"// Data file generated from {len(images)} images\n")
+        # f.write(f"#define NUM_SAMPLES {len(images)}\n")
+        # f.write(f"#define IMAGE_WIDTH {images.shape[1]}\n")
+        # f.write(f"#define IMAGE_HEIGHT {images.shape[2]}\n")
+        # f.write(f"#define IMAGE_CHANNELS {images.shape[3]}\n\n")
 
-        f.write("const float images[NUM_SAMPLES][IMAGE_WIDTH][IMAGE_HEIGHT][IMAGE_CHANNELS] = {\n")
+        f.write("const float " + data_group + "Images[NUM_SAMPLES][IMAGE_WIDTH][IMAGE_HEIGHT][IMAGE_CHANNELS] = {\n")
         for img in images:
             f.write("  {\n")
             for row in img:
@@ -136,14 +155,52 @@ def write_data_to_cpp(filename, images, labels):
             f.write("  },\n")
         f.write("};\n\n")
 
-        f.write("const int labels[NUM_SAMPLES] = {\n")
+        f.write("const int " + data_group + "Labels[NUM_SAMPLES] = {\n")
         for label in labels:
-            f.write(f"  {label},\n")
+            f.write(f"  {label}, ")
         f.write("};\n")
 
 # skriv träningsdata till cpp fil
-write_data_to_cpp("suit_train_data.cpp", images, suit_labels)
 
-write_data_to_cpp("suit_val_data.cpp", val_images, val_suit_labels)
+def createFileAsString(images, labels, data_group):
+    content = "\nconst float " + data_group + "Images["+str(images.shape[0])+"]["+str(images.shape[1])+"] = {\n" 
+    for img in images:
+        content += "    {"
+        for pixel in img:
+            content+= f"{pixel:.6f}, "
+        content = content.rstrip(", ")
+        content += "},\n"
+    content = content.rstrip(",\n")
+    content += "\n};\n"
 
-write_data_to_cpp("suit_test_data.cpp", test_images, test_suit_labels)
+    content += "\nconst float " + data_group + "Labels["+str(labels.shape[0])+"] = {\n    "
+    for label in labels:
+        content += f"{label}, "
+    content = content.rstrip(", ")
+    content += "\n};\n"
+
+    return content
+
+flat_train_images = images.reshape(images.shape[0], images.shape[1]*images.shape[2])
+flat_val_images = val_images.reshape(val_images.shape[0], val_images.shape[1]*val_images.shape[2])
+#flat_test_images = test_images.reshape(test_images.shape[0], test_images.shape[1]*test_images.shape[2])
+
+with open("data.h", "w") as file:
+    file.write("#define NUM_TRAIN_SAMPLES " + str(flat_train_images.shape[0]) + "\n")
+    file.write("#define NUM_VAL_SAMPLES " + str(flat_val_images.shape[0]) + "\n")
+    #file.write("#define NUM_TEST_SAMPLES " + str(flat_test_images.shape[0]) + "\n")
+    file.write(createFileAsString(flat_train_images, suit_labels, "train"))
+    file.write(createFileAsString(flat_val_images, val_suit_labels, "val"))
+    #file.write(createFileAsString(flat_test_images, test_suit_labels, "test"))
+
+
+# write_data_to_cpp("data.h", flat_train_images, suit_labels, "train")
+
+# write_data_to_cpp("data.h", flat_val_images, val_suit_labels, "val")
+
+# write_data_to_cpp("data.h", flat_test_images, test_suit_labels, "test")
+
+## TODO:
+# Separate data for federated learning, make two separate .h files.
+# Try the ML-model with the real C++ data from the data.h file
+# Figure out if all images can be uploaded to Arduino, or have to be sent a few at a time
