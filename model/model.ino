@@ -25,12 +25,12 @@ uint8_t frame[CAM_W * CAM_H];
 #define SMALL_SIZE (SMALL_W * SMALL_H)
 
 // Den nedskalade, normaliserade bilden (24x24 => 576 float-värden)
-float smallImage[SMALL_SIZE];
+uint8_t smallImage[SMALL_SIZE];
 
 #define EPOCH 10 // max number of epochs
 int epoch_count = 0; // tracks the current epoch
 
-void downsampleToSmallBilinearNorm(const uint8_t* src, float* dst) {
+void downsampleToSmallBilinear(const uint8_t* src, uint8_t* dst) {
   float x_ratio = (float)(CAM_W - 1) / (SMALL_W - 1);
   float y_ratio = (float)(CAM_H - 1) / (SMALL_H - 1);
 
@@ -55,11 +55,10 @@ void downsampleToSmallBilinearNorm(const uint8_t* src, float* dst) {
       float bottom = p01 + x_lerp * (p11 - p01);
       float value  = top + y_lerp * (bottom - top);
 
-      dst[y * SMALL_W + x] = value / 255.0f;
+      dst[y * SMALL_W + x] = (uint8_t)(value + 0.5f); // korrekt avrundning
     }
   }
 }
-
 
 
 void setup(){
@@ -155,7 +154,7 @@ void setup(){
   BLE.poll();
   Camera.readFrame(frame);
 
-  downsampleToSmallBilinearNorm(frame, smallImage);
+  downsampleToSmallBilinear(frame, smallImage);
   float* prediction = inference(smallImage);
   // TODO: Gör något här med resultatet
   delete[] prediction;
@@ -164,7 +163,7 @@ void setup(){
   //Serial.print("Normalized pixles: ");
     for (int y = 0; y < SMALL_H; y++) {
         for (int x = 0; x < SMALL_W; x++) {
-            int binaryPixel = (smallImage[y * SMALL_W + x] >= 0.5f) ? 1 : 0;
+            int binaryPixel = (smallImage[y * SMALL_W + x] >= 128) ? 1 : 0;
             Serial.print(binaryPixel);
         }
         Serial.println(); // new line for each row
