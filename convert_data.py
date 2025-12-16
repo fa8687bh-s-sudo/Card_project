@@ -79,14 +79,14 @@ def train_val_split(images, labels):
 
 
 def create_file_content(images, labels, data_group):
-    content = f"\nconst uint8_t {data_group}Images[{images.shape[0]}][{images.shape[1]}] = {{\n"
+    content = f"\nconst uint8_t {data_group}Images[{images.shape[0]}][{images.shape[1]}] PROGMEM = {{\n"
     for image in images:
         content += "    {"
         content += ", ".join(str(byte) for byte in image)
         content += "},\n"
     content += "};\n"
 
-    content += f"\nconst int {data_group}Labels[{labels.shape[0]}] = {{\n    "
+    content += f"\nconst uint8_t {data_group}Labels[{labels.shape[0]}] PROGMEM = {{\n    "
     content += ", ".join(str(l) for l in labels)
     content += "\n};\n"
 
@@ -102,6 +102,6 @@ images, labels = load_images()
 train_images, train_labels, val_images, val_labels = train_val_split(images, labels)
 train_data_string = create_file_content(train_images, train_labels, "train")
 val_data_string = create_file_content(val_images, val_labels, "val")
-include = "#include <cstdint>\n"
+inclusions = "#include <cstdint>\n#include <Arduino.h>\n"
 definitions = f"\n#define NBR_TRAIN_IMAGES {train_images.shape[0]}\n#define NBR_VAL_IMAGES {val_images.shape[0]}\n"
-write_to_file((include, definitions, train_data_string, val_data_string))
+write_to_file((inclusions, definitions, train_data_string, val_data_string))

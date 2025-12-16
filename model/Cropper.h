@@ -124,7 +124,7 @@ void printCardBox(uint8_t image[IMAGE_SIZE][IMAGE_SIZE], ComponentBox box) {
     }
 }
 
-uint8_t* cropImage(uint8_t* fullImage) {
+uint8_t* cropImage(const uint8_t* fullImage) {
     uint8_t unpacked[IMAGE_SIZE][IMAGE_SIZE];
     unpackImage(fullImage, IMAGE_SIZE, IMAGE_SIZE, unpacked);
 

@@ -8,7 +8,7 @@
 
 float *weightsAndBiasStorage = nullptr;
 int numParams = 0;
-const size_t resolution = 24; 
+const size_t resolution = 32; 
 size_t calculateMaxParam();
 const size_t MAX_PARAMS = 6000; 
 
@@ -27,7 +27,7 @@ struct Layer {
 };
 
 Layer *layers = nullptr;
-size_t layerSizes[] = {resolution * resolution, 10, 4}; // 24x24 image
+size_t layerSizes[] = {resolution * resolution, 10, 4};
 size_t nbrLayers = sizeof(layerSizes) / sizeof(layerSizes[0]);
 
 Neuron createNeuron(size_t layerIndex)
@@ -117,13 +117,11 @@ void updateWeightsAndBias(size_t layerIndex, size_t neuronIndex){
 }
 
 void forwardPropagation(const uint8_t *input){
-    // Set output values of first layer
     for (size_t neuron = 0; neuron < layerSizes[0]; neuron++)
     {
         layers[0].neurons[neuron].postActivation = input[neuron] / 255.0f;
     }
 
-    // Calculate output values for all hidden layers
     for (size_t layer = 1; layer < nbrLayers - 1; layer++)
     {
         for (size_t neuron = 0; neuron < layerSizes[layer]; neuron++)
@@ -133,7 +131,6 @@ void forwardPropagation(const uint8_t *input){
         }
     }
 
-    // Calculate output values for last layer
     for (size_t neuron = 0; neuron < layerSizes[nbrLayers - 1]; neuron++) {
         layers[nbrLayers - 1].neurons[neuron].preActivation = calculatePreActivation(nbrLayers - 1, neuron);
     }
@@ -174,12 +171,6 @@ void trainModel(const uint8_t *input, size_t correctSuit) {
     forwardPropagation(input);
     backwardPropagation(correctArray);
     delete[] correctArray;
-}
-
-void trainModelAllImages(){
-    for(int i = 0; i < NBR_TRAIN_IMAGES; i++) {
-        trainModel(trainImages[i], trainLabels[i]);
-    }
 }
 
 float* inference(const uint8_t* input) {
