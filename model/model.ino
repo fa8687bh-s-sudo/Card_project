@@ -146,12 +146,15 @@ void setup(){
 
   // Skriv ut de första 20 normaliserade pixlarna så vi ser att något händer
   //Serial.print("Normalized pixles: ");
-    for (int i = 0; i < 20; i++) {
-      //Serial.print(smallImage[i], 3);  // 3 decimaler
-      //Serial.print(' ');
+    for (int y = 0; y < SMALL_H; y++) {
+        for (int x = 0; x < SMALL_W; x++) {
+            int binaryPixel = (smallImage[y * SMALL_W + x] >= 0.5f) ? 1 : 0;
+            Serial.print(binaryPixel);
+        }
+        Serial.println(); // new line for each row
     }
-  //Serial.println();
-  delay(500); // lite paus
+    Serial.println(); // extra line to separate frames
+    delay(10000);
  }
 
 
