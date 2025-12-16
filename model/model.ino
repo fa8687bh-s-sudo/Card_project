@@ -20,30 +20,46 @@ const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
 // Buffer där hela kamerabilden hamnar (176 * 144 bytes)
 uint8_t frame[CAM_W * CAM_H];
 
-#define SMALL_W resolution
-#define SMALL_H resolution
+#define SMALL_W 128
+#define SMALL_H 128
 #define SMALL_SIZE (SMALL_W * SMALL_H)
 
 // Den nedskalade, normaliserade bilden (24x24 => 576 float-värden)
-uint8_t smallImage[SMALL_SIZE];
+float smallImage[SMALL_SIZE];
 
 #define EPOCH 10 // max number of epochs
 int epoch_count = 0; // tracks the current epoch
 
-void downsampleToSmall(const uint8_t* fullImage, uint8_t* smallImage) {
-  for (int smallY = 0; smallY < SMALL_H; smallY++) {
-    int fullY = (smallY * CAM_H) / SMALL_H; // motsvarande rad i stora bilden
-    
-    for (int smallX = 0; smallX < SMALL_W; smallX++) {
-      int fullX = (smallX * CAM_W) / SMALL_W; // motsvarande kolumn i stora bilden
-      // index i flat array
-      int fullIndex  = fullY  * CAM_W  + fullX;
-      int smallIndex = smallY * SMALL_W + smallX;
-      // normalisera 0..255 → 0..1
-      smallImage[smallIndex] = fullImage[fullIndex];
+void downsampleToSmallBilinearNorm(const uint8_t* src, float* dst) {
+  float x_ratio = (float)(CAM_W - 1) / (SMALL_W - 1);
+  float y_ratio = (float)(CAM_H - 1) / (SMALL_H - 1);
+
+  for (int y = 0; y < SMALL_H; y++) {
+    float srcY = y * y_ratio;
+    int y0 = (int)srcY;
+    int y1 = min(y0 + 1, CAM_H - 1);
+    float y_lerp = srcY - y0;
+
+    for (int x = 0; x < SMALL_W; x++) {
+      float srcX = x * x_ratio;
+      int x0 = (int)srcX;
+      int x1 = min(x0 + 1, CAM_W - 1);
+      float x_lerp = srcX - x0;
+
+      float p00 = src[y0 * CAM_W + x0];
+      float p10 = src[y0 * CAM_W + x1];
+      float p01 = src[y1 * CAM_W + x0];
+      float p11 = src[y1 * CAM_W + x1];
+
+      float top    = p00 + x_lerp * (p10 - p00);
+      float bottom = p01 + x_lerp * (p11 - p01);
+      float value  = top + y_lerp * (bottom - top);
+
+      dst[y * SMALL_W + x] = value / 255.0f;
     }
   }
 }
+
 
 
 void setup(){
@@ -139,7 +155,7 @@ void setup(){
   BLE.poll();
   Camera.readFrame(frame);
 
-  downsampleToSmall(frame, smallImage);
+  downsampleToSmallBilinearNorm(frame, smallImage);
   float* prediction = inference(smallImage);
   // TODO: Gör något här med resultatet
   delete[] prediction;
