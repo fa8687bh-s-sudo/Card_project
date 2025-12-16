@@ -1,6 +1,7 @@
 const int N_CLASSES = 4;
 
 
+
 #include <Arduino.h>
 #include <Arduino_OV767X.h>
 #include <ArduinoBLE.h>
@@ -10,6 +11,7 @@ const int N_CLASSES = 4;
 
 
 const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
+
 
 // Vi använder QCIF (176x144) i gråskala – 1 byte per pixel
 #define CAM_W 176
@@ -76,7 +78,8 @@ void setup(){
     Serial.println("Got weight characteristic from peripheral device");
 
     //Läser vikter från peripheral
-    readWeightsFromCharacteristic(peripheral_characteristic);
+    //readWeightsFromCharacteristic(peripheral_characteristic);
+    readWeightsChunked(peripheral_characteristic);
     Serial.println("Read weights from peripheral device");
 
     //beräkna nya vikter utifrån peripheral
@@ -85,7 +88,9 @@ void setup(){
 
     // Skriv tillbaka globala vikter till peripheral
     Serial.println("Sending updated global weights back to peripheral...");
-    writeWeightsToCharacteristic(peripheral_characteristic);;
+    //writeWeightsToCharacteristic(peripheral_characteristic);
+    writeWeightsChunked(peripheral_characteristic);
+    blePrint("Peripheral has recieved new calculated weights from central");
 
     Serial.println("Central done.");
 
@@ -100,9 +105,11 @@ void setup(){
     //Packar vikter
     Serial.println("Packing weights ...");
     packWeights();
+    BLE.advertise();
 
     //skickar vikter till central
-    writeWeightsToCharacteristic(weightChar);
+    //writeWeightsToCharacteristic(weightChar);
+    writeWeightsChunked(weightChar);
     Serial.print("Weights have been sent from peripheral device to central device");    
   }
 
@@ -138,12 +145,12 @@ void setup(){
   delete[] prediction;
 
   // Skriv ut de första 20 normaliserade pixlarna så vi ser att något händer
-  Serial.print("Normalized pixles: ");
+  //Serial.print("Normalized pixles: ");
     for (int i = 0; i < 20; i++) {
-      Serial.print(smallImage[i], 3);  // 3 decimaler
-      Serial.print(' ');
+      //Serial.print(smallImage[i], 3);  // 3 decimaler
+      //Serial.print(' ');
     }
-  Serial.println();
+  //Serial.println();
   delay(500); // lite paus
  }
 
