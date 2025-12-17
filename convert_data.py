@@ -24,7 +24,7 @@ def visualise_images(images):
 
     for image in images:
         image = np.array(image, dtype=np.uint8)
-        bits = np.unpackbits(image)[:RESOLUTION*RESOLUTION]
+        bits = np.unpackbits(image)[:RESOLUTION * RESOLUTION]
         image = bits.reshape((RESOLUTION, RESOLUTION))
         
         plt.figure()
@@ -55,6 +55,8 @@ def load_images():
     labels = []
     for label, class_name in enumerate(CLASSES):
         for file_path in DATA_PATH.joinpath(class_name).glob("*.jpeg"):
+            if not file_path.stem[0].isdigit():  # For now we only look at the number cards
+                continue
             image = Image.open(file_path)
             image_array = file_to_bits(image)
             packed_image = bits_to_bytes(image_array)
@@ -102,6 +104,8 @@ images, labels = load_images()
 train_images, train_labels, val_images, val_labels = train_val_split(images, labels)
 train_data_string = create_file_content(train_images, train_labels, "train")
 val_data_string = create_file_content(val_images, val_labels, "val")
-inclusions = "#include <cstdint>\n#include <Arduino.h>\n"
+inclusions = "#pragma once\n#include <cstdint>\n#include <Arduino.h>\n"
 definitions = f"\n#define NBR_TRAIN_IMAGES {train_images.shape[0]}\n#define NBR_VAL_IMAGES {val_images.shape[0]}\n"
 write_to_file((inclusions, definitions, train_data_string, val_data_string))
+
+visualise_images(train_images)
