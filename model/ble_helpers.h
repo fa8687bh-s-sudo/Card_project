@@ -14,35 +14,23 @@
 const char* deviceServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214"; // denna ska anpassas
 
 // UUID of the characteristic used for transferring weights between central and peripheral.
-const char* weightCharUuid    = "19b10001-e8f2-537e-4f6c-d104768a1214";
+const char* weightCharUuid    = "19b10001-e8f2-537e-4f6c-d104768a1214"; // central -> peripheral (WRITE)
+const char* notifyCharUuid    = "19b10003-e8f2-537e-4f6c-d104768a1214"; // peripheral -> central (NOTIFY)
+
+// TOTAL_PARAMS = exakt hur många floats packWeights() ger
+const int TOTAL_PARAMS = 5814;
 
 
 // ==================== WEIGHT DECLARATIONS ====================
 
-// OBS denna ska ändras när vi vet vikterna!
-
 const int MAX_WEIGHTS = 24000;
 float weightsAndBias[MAX_PARAMS]; 
-
-BLECharacteristic weightChar(
-  weightCharUuid,
-  BLERead | BLEWrite,
-  MAX_PARAMS * sizeof(float) 
-);
 
 uint8_t weights[MAX_WEIGHTS];
 int numWeightsUsed = 0;
 
-
-// ----- To print to other device ----- 
-const char* logCharUuid       = "19b10002-e8f2-537e-4f6c-d104768a1214";
-
-BLECharacteristic logChar(
-  logCharUuid,
-  BLERead | BLENotify,
-  100
-);
-
+BLECharacteristic weightChar(weightCharUuid, BLEWrite,  sizeof(float));   // c->p
+BLECharacteristic notifyChar(notifyCharUuid, BLEIndicate, sizeof(float));   // p->c
 
 // ==================== FUNCTION DECLARATIONS ====================
 
@@ -51,13 +39,14 @@ void blePeripheralSetUp();
 BLEDevice connectToPeripheral();
 BLECharacteristic getWeightCharacteristic(BLEDevice peripheral);
 void writeWeightsToCharacteristic(BLECharacteristic& chr);
-int readWeightsFromCharacteristic(BLECharacteristic& chr);
-void blePrint(const char* text);
-
-BLEService weightService(deviceServiceUuid); //denna är jag lite osäker på
+int readWeightsBlocking(BLEDevice central);
+BLEService weightService(deviceServiceUuid);
 
 
 // ==================== FUNCTION IMPLEMENTATIONS ====================
+
+
+// ==================== SETUPS ====================
 
 /**
  * @brief Set up the device as a BLE central.
@@ -84,11 +73,14 @@ void blePeripheralSetUp() {
   BLE.setLocalName("Card Peripheral");
   BLE.setAdvertisedService(weightService);
   weightService.addCharacteristic(weightChar);
+  weightService.addCharacteristic(notifyChar);
   BLE.addService(weightService);
+  BLE.advertise();
 
   Serial.println("Peripheral ready");
 }
 
+// ==================== ENABLING CONNECTION ====================
 
 /**
  * @brief Scan for and return a peripheral that exposes the target service UUID.
@@ -116,176 +108,160 @@ BLEDevice connectToPeripheral() {
   return peripheral;
 }
 
+// ==================== GETTING CHARACTERISTICS ====================
+
 /**
  * @brief Connect to a peripheral and retrieve the weight characteristic.
  */
 BLECharacteristic getWeightCharacteristic(BLEDevice peripheral) {
   if (!peripheral.connect()) {
     Serial.println("Failed to connect.");
-    return BLECharacteristic();  // tom
+    return BLECharacteristic(); //empty
   }
 
   Serial.println("Connected!");
 
-  if (!peripheral.discoverAttributes()) {
-    Serial.println("Failed to discover attributes.");
+  // Retry discoverAttributes 5 times
+  bool ok = false;
+  for (int attempt = 0; attempt < 5; attempt++) {
+    if (peripheral.discoverAttributes()) {
+      ok = true;
+      break;
+    }
+    Serial.print("discoverAttributes failed, retry ");
+    Serial.println(attempt + 1);
+    delay(300);
+    BLE.poll();
+  }
+
+  if (!ok) {
+    Serial.println("Failed to discover attributes (giving up).");
     peripheral.disconnect();
     return BLECharacteristic();
   }
 
   BLECharacteristic chr = peripheral.characteristic(weightCharUuid);
-
-  if (!chr) {
-    Serial.println("Characteristic not found!");
-  }
-
+  if (!chr) Serial.println("Characteristic not found!");
   return chr;
 }
+
+/**
+ * @brief Retrieve the notify characteristic from a connected peripheral.
+ */
+BLECharacteristic getNotifyCharacteristic(BLEDevice peripheral) {
+  BLECharacteristic chr = peripheral.characteristic(notifyCharUuid);
+  if (!chr) Serial.println("Notify characteristic not found!");
+  return chr;
+}
+
+// ==================== SENDING DATA ====================
 
 /**
  * @brief Write the current weights to the given BLE characteristic.
  */
 void writeWeightsToCharacteristic(BLECharacteristic& chr) {
-  Serial.println("numParams är: ");
-  Serial.print(numParams);
-  if (numParams <= 0 || numParams > MAX_PARAMS) {
-    Serial.println("Invalid numParams, cannot send weights.");
-    return;
-  }
+  packWeights();
+  Serial.println("Packing weights");
 
-  int numBytes = numParams * sizeof(float);
-  Serial.print("numBytes: ");
-  Serial.println(numBytes);
-
-  bool ok = chr.writeValue((uint8_t*)weightsAndBias, numBytes);
-  if (ok) {
-    Serial.print("Sent ");
-    Serial.print(numParams);
-    Serial.println(" params via BLE.");
-  } else {
-    Serial.println("Could not send weights");
+  for (int i = 0; i < TOTAL_PARAMS; i++) {
+    uint8_t b[sizeof(float)];
+    memcpy(b, &weightsAndBias[i], sizeof(float));
+    chr.writeValue(b, sizeof(float));
+    if (i % 200 == 0) Serial.println(weightsAndBias[i]);
+    BLE.poll();
+    delay(20);
   }
 }
-
 
 /**
- * @brief Read weight data from a BLE characteristic
+ * @brief Read incoming weight floats from the central to the peripheral.
  */
-int readWeightsFromCharacteristic(BLECharacteristic& chr) {
-  int maxBytes = MAX_PARAMS * sizeof(float);
-  Serial.print("maxBytes: ");
-  Serial.println(maxBytes);
+int countReadWeightsBlocking = 0;
+int readWeightsBlocking(BLEDevice central) {
+  BLE.poll();
 
-  int len = chr.readValue((uint8_t*)weightsAndBias, maxBytes);
-  Serial.print("length / len: " );
-  Serial.println(len);
+    if (weightChar.written()) {
+      Serial.print("inside readWeightsBlocking");
+      float v;
+      int n = weightChar.readValue((uint8_t*)&v, sizeof(float));
+      Serial.println(v);
+      if (n != (int)sizeof(float)) {
+        Serial.println("Failed to read float");
+      }
 
-  if (len <= 0) {
-    Serial.println("Failed to read weights from characteristic.");
-    numParams = 0;
-    return 0;
-  }
+      weightsAndBias[countReadWeightsBlocking++] = v;
 
-  numParams = len / sizeof(float);
-
-  Serial.print("Read ");
-  Serial.print(numParams);
-  Serial.println(" params from BLE.");
-
-  return numParams;
-}
-
-void blePrint(const char* text) {
-  if (BLE.connected()) {
-    logChar.writeValue((const uint8_t*)text, strlen(text));
-  }
+      if (countReadWeightsBlocking >= TOTAL_PARAMS) {
+        numParams = TOTAL_PARAMS;
+        Serial.println("All weights received!");
+        return numParams;
+      }
+    }
+  return countReadWeightsBlocking; // number of floats recieved
 }
 
 
-// ==================== CHUNKED SEND / RECEIVE ====================
-// Skicka vikter i små bitar (chunks) eftersom BLE bara klarar ~244 bytes per write
+void peripheralLoop(){
+  BLEDevice central = BLE.central();
+  if (central) {
+    int got = 0;
+    while (got < TOTAL_PARAMS){
+      Serial.print("inside peripheralloop ");
+      int got = readWeightsBlocking(central);
+      if (got >= TOTAL_PARAMS) {
+        unpackWeights();
+        return;
+    }
+    }
+}
+}
 
-void writeWeightsChunked(BLECharacteristic& chr) {
-  if (numParams <= 0) {
-    Serial.println("writeWeightsChunked: no params");
-    return;
+void peripheralSendWeightsToCentral() {
+  packWeights();
+  Serial.println("inside peripheralSendWeightsToCentral");
+
+  for (int i = 0; i < TOTAL_PARAMS; i++) {
+    notifyChar.writeValue((uint8_t*)&weightsAndBias[i], sizeof(float));
+    BLE.poll();
+    delay(20);
+  }
+}
+
+int countCentralRecieveWeights = 0;
+int centralReceiveWeightsFromPeripheral(BLECharacteristic& notifyRemote) {
+  while (countCentralRecieveWeights < TOTAL_PARAMS){
+    BLE.poll();
+    if (notifyRemote.valueUpdated()) {
+      float v;
+      int n = notifyRemote.readValue((uint8_t*)&v, sizeof(float));
+      if (countCentralRecieveWeights % 200 == 0) Serial.println(v);
+      if (n == (int)sizeof(float)) {
+        weightsAndBias[countCentralRecieveWeights++] = v;
+        }
+      }
+    }
+  //numParams = TOTAL_PARAMS;
+  return countCentralRecieveWeights;
   }
 
-  int totalBytes = numParams * sizeof(float);
-  uint8_t* bytes = (uint8_t*)weightsAndBias;
 
-  const int CHUNK_BYTES = 200;     // något under max (~244)
+// ==================== WAIT FUNCTION ====================
 
-  Serial.print("Chunked sending ");
-  Serial.print(totalBytes);
-  Serial.println(" bytes...");
+void waitForGo() {
+  Serial.println("Waiting for GO from central...");
 
-  // Skriv först hur många bytes det totalt gäller (header)
-  chr.writeValue((uint8_t*)&totalBytes, sizeof(int));
-  delay(20);
+  while (true) {
+    BLE.poll();
+    BLEDevice central = BLE.central();
 
-  for (int offset = 0; offset < totalBytes; offset += CHUNK_BYTES) {
-    int thisLen = min(CHUNK_BYTES, totalBytes - offset);
-
-    bool ok = chr.writeValue(bytes + offset, thisLen);
-    if (!ok) {
-      Serial.print("Chunk write failed at offset ");
-      Serial.println(offset);
+    if (central && weightChar.written()) {
+      float go = 0.0f;
+    if (weightChar.readValue((uint8_t*)&go, sizeof(float)) == sizeof(float) && go == 1.0f) {
+      Serial.println("GO received!");
       return;
+      }
     }
-
-    delay(10); // ge BLE-stack tid
   }
-
-  Serial.println("Chunked sending done!");
 }
-
-
-int readWeightsChunked(BLECharacteristic& chr) {
-  // 1) Läs hur många bytes vi ska ta emot
-  int totalBytes = 0;
-  int len = chr.readValue((uint8_t*)&totalBytes, sizeof(int));
-  if (len != sizeof(int)) {
-    Serial.println("readWeightsChunked: failed to read header.");
-    return 0;
-  }
-
-  Serial.print("Expecting ");
-  Serial.print(totalBytes);
-  Serial.println(" bytes total.");
-
-  int expectedParams = totalBytes / sizeof(float);
-  if (expectedParams > MAX_PARAMS) {
-    Serial.println("Too many params in chunked read!");
-    return 0;
-  }
-
-  uint8_t* bytes = (uint8_t*)weightsAndBias;
-
-  const int CHUNK_BYTES = 200;
-
-  int received = 0;
-
-  while (received < totalBytes) {
-    int toRead = min(CHUNK_BYTES, totalBytes - received);
-
-    int got = chr.readValue(bytes + received, toRead);
-    if (got <= 0) {
-      Serial.println("readWeightsChunked: failed mid-way");
-      return 0;
-    }
-
-    received += got;
-    delay(10);
-  }
-
-  numParams = expectedParams;
-
-  Serial.print("Chunked read complete. Received params = ");
-  Serial.println(numParams);
-
-  return numParams;
-}
-
 
 
