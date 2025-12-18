@@ -1,7 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cmath>
-#include "data_central.h" 
+#include "data_peripheral.h" 
 #include <Arduino.h>
 
 #define LEARNING_RATE 0.001
@@ -10,7 +10,7 @@ float *weightsAndBiasStorage = nullptr;
 int numParams = 0;
 const size_t resolution = 32; 
 size_t calculateMaxParam();
-const size_t MAX_PARAMS = 6000; 
+const size_t MAX_PARAMS = 11000; 
 
 struct Neuron{
     float *weights;
@@ -171,6 +171,12 @@ void trainModel(const uint8_t *input, size_t correctSuit) {
     forwardPropagation(input);
     backwardPropagation(correctArray);
     delete[] correctArray;
+}
+
+void trainModelAllImages(){
+    for(int i = 0; i < NBR_TRAIN_IMAGES; i++) {
+        trainModel(trainImages[i], trainLabels[i]);
+    }
 }
 
 float* inference(const uint8_t* input) {

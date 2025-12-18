@@ -7,7 +7,7 @@ const int N_CLASSES = 4;
 #include "ble_helpers.h"
 #include "NeuralNetwork.h"
 
-const int BLEDEVICE = 0; // 0 om central, 1 om peripheral
+const int BLEDEVICE = 1; // 0 om central, 1 om peripheral
 
 // Vi använder QCIF (176x144) i gråskala – 1 byte per pixel
 #define CAM_W 176
@@ -140,7 +140,7 @@ void setup(){
   }
     //Retrieving weights from Central
     if (central && sent) {
-      peripheralLoop(); // ta emot uppdaterade vikter här
+      peripheralRecievingWeightsFromCentral(); // ta emot uppdaterade vikter här
     }
 
     if (!central) sent = false;   
@@ -169,13 +169,14 @@ void setup(){
 }
 
  void loop(){
+  /*
   BLE.poll();
   Camera.readFrame(frame);
 
-  downsampleToSmallBilinear(frame, smallImage);
-  float* prediction = inference(smallImage);
+  //downsampleToSmallBilinear(frame, smallImage);
+  //float* prediction = inference(smallImage);
   // TODO: Gör något här med resultatet
-  delete[] prediction;
+  //delete[] prediction;
 
   // Skriv ut de första 20 normaliserade pixlarna så vi ser att något händer
   //Serial.print("Normalized pixles: ");
@@ -188,6 +189,7 @@ void setup(){
     }
     Serial.println(); // extra line to separate frames
     delay(10000);
+    */
  }
 
 

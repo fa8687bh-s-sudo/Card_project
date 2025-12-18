@@ -18,7 +18,7 @@ const char* weightCharUuid    = "19b10001-e8f2-537e-4f6c-d104768a1214"; // centr
 const char* notifyCharUuid    = "19b10003-e8f2-537e-4f6c-d104768a1214"; // peripheral -> central (NOTIFY)
 
 // TOTAL_PARAMS = exakt hur många floats packWeights() ger
-const int TOTAL_PARAMS = 5814;
+const int TOTAL_PARAMS = 200;
 
 
 // ==================== WEIGHT DECLARATIONS ====================
@@ -167,7 +167,12 @@ void writeWeightsToCharacteristic(BLECharacteristic& chr) {
     uint8_t b[sizeof(float)];
     memcpy(b, &weightsAndBias[i], sizeof(float));
     chr.writeValue(b, sizeof(float));
-    if (i % 200 == 0) Serial.println(weightsAndBias[i]);
+    if (i % 200 == 0){
+      Serial.println("Weight number ");
+      Serial.print(i);
+      Serial.print(" ");
+      Serial.println(weightsAndBias[i]);
+    }
     BLE.poll();
     delay(20);
   }
@@ -176,38 +181,42 @@ void writeWeightsToCharacteristic(BLECharacteristic& chr) {
 /**
  * @brief Read incoming weight floats from the central to the peripheral.
  */
-int countReadWeightsBlocking = 0;
-int readWeightsBlocking(BLEDevice central) {
+int countperipheralReadEachWeight = 0;
+int peripheralReadEachWeight(BLEDevice central) {
   BLE.poll();
 
     if (weightChar.written()) {
-      Serial.print("inside readWeightsBlocking");
       float v;
       int n = weightChar.readValue((uint8_t*)&v, sizeof(float));
-      Serial.println(v);
+      if (countperipheralReadEachWeight % 200 == 0){
+        Serial.println("Weight number ");
+        Serial.print(countperipheralReadEachWeight);
+        Serial.print(": ");
+        Serial.print(v);
+        }
       if (n != (int)sizeof(float)) {
         Serial.println("Failed to read float");
       }
 
-      weightsAndBias[countReadWeightsBlocking++] = v;
+      weightsAndBias[countperipheralReadEachWeight++] = v;
 
-      if (countReadWeightsBlocking >= TOTAL_PARAMS) {
+      if (countperipheralReadEachWeight >= TOTAL_PARAMS) {
         numParams = TOTAL_PARAMS;
         Serial.println("All weights received!");
         return numParams;
       }
     }
-  return countReadWeightsBlocking; // number of floats recieved
+  return countperipheralReadEachWeight; // number of floats recieved
 }
 
 
-void peripheralLoop(){
+void peripheralRecievingWeightsFromCentral(){
   BLEDevice central = BLE.central();
+  Serial.println("inside peripheralRecievingWeightsFromCentral");
   if (central) {
     int got = 0;
     while (got < TOTAL_PARAMS){
-      Serial.print("inside peripheralloop ");
-      int got = readWeightsBlocking(central);
+      int got = peripheralReadEachWeight(central);
       if (got >= TOTAL_PARAMS) {
         unpackWeights();
         return;
@@ -222,6 +231,12 @@ void peripheralSendWeightsToCentral() {
 
   for (int i = 0; i < TOTAL_PARAMS; i++) {
     notifyChar.writeValue((uint8_t*)&weightsAndBias[i], sizeof(float));
+    if (i % 200 == 0){
+      Serial.println("Weight number ");
+      Serial.print(i);
+      Serial.print(": ");
+      Serial.println(weightsAndBias[i]);
+    }
     BLE.poll();
     delay(20);
   }
@@ -234,7 +249,12 @@ int centralReceiveWeightsFromPeripheral(BLECharacteristic& notifyRemote) {
     if (notifyRemote.valueUpdated()) {
       float v;
       int n = notifyRemote.readValue((uint8_t*)&v, sizeof(float));
-      if (countCentralRecieveWeights % 200 == 0) Serial.println(v);
+      if (countCentralRecieveWeights % 200 == 0){
+        Serial.println("Weight number ");
+        Serial.print(countCentralRecieveWeights);
+        Serial.print(" ");
+        Serial.println(v);
+      }
       if (n == (int)sizeof(float)) {
         weightsAndBias[countCentralRecieveWeights++] = v;
         }
