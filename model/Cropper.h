@@ -1,155 +1,181 @@
-#include <iostream>
-#include <fstream>
+#pragma once
+#include <Arduino.h>
 #include <stdint.h>
-#include <vector>
-#include <cstring>
-#include <algorithm>
 
 #define IMAGE_SIZE 128
 #define PATCH_SIZE 32
 
-void unpackImage(const uint8_t* packed, int rows, int cols, uint8_t image[IMAGE_SIZE][IMAGE_SIZE]) {
-    for (int i = 0; i < rows * cols; i++) {
-        int byteIndex = i / 8;
-        int bitIndex  = 7 - (i % 8);
-        image[i / cols][i % cols] = (packed[byteIndex] >> bitIndex) & 1;
-    }
+static inline void visitedClear(uint8_t* bits, size_t nbytes) {
+  memset(bits, 0, nbytes);
 }
+
+static inline bool visitedGet(const uint8_t* bits, uint16_t idx) {
+  return (bits[idx >> 3] >> (idx & 7)) & 1;
+}
+
+static inline void visitedSet(uint8_t* bits, uint16_t idx) {
+  bits[idx >> 3] |= (1u << (idx & 7));
+}
+
+// Pack (x,y) into a single 16-bit value since 0..127 fits in 7 bits each
+static inline uint16_t packXY(uint8_t x, uint8_t y) {
+  return (uint16_t(y) << 8) | uint16_t(x);
+}
+static inline uint8_t unpackX(uint16_t v) { return uint8_t(v & 0xFF); }
+static inline uint8_t unpackY(uint16_t v) { return uint8_t(v >> 8); }
 
 struct ComponentBox {
-    int minX, minY, maxX, maxY;
-    int size;
+  int minX, minY, maxX, maxY;
+  int size;
 };
 
-ComponentBox findLargestRegion(uint8_t image[IMAGE_SIZE][IMAGE_SIZE], int targetColor, int minX, int minY, int maxX, int maxY) {
-    static uint8_t visited[IMAGE_SIZE][IMAGE_SIZE];
-    memset(visited, 0, sizeof(visited));
+// fullImage is bit-packed (1 bit per pixel), MSB first in each byte
+static inline uint8_t getPackedPixel(const uint8_t* packed, int x, int y) {
+  const int i = y * IMAGE_SIZE + x;
+  const int byteIndex = i >> 3;
+  const int bitIndex  = 7 - (i & 7);
+  return (packed[byteIndex] >> bitIndex) & 1;
+}
 
-    ComponentBox best;
-    best.size = 0;
+// If you *already* have an unpacked 0/1 image, keep this.
+static void unpackImage(const uint8_t* packed, uint8_t* outUnpacked /* IMAGE_SIZE*IMAGE_SIZE */) {
+  for (int y = 0; y < IMAGE_SIZE; y++) {
+    for (int x = 0; x < IMAGE_SIZE; x++) {
+      outUnpacked[y * IMAGE_SIZE + x] = getPackedPixel(packed, x, y);
+    }
+  }
+}
 
-    static int stackX[IMAGE_SIZE * IMAGE_SIZE];
-    static int stackY[IMAGE_SIZE * IMAGE_SIZE];
+// Low-RAM flood fill:
+// - visited is a bitset: (IMAGE_SIZE*IMAGE_SIZE)/8 bytes = 2048 bytes at 128x128
+// - stack is uint16_t packed XY: IMAGE_SIZE*IMAGE_SIZE * 2 bytes = 32768 bytes
+static ComponentBox findLargestRegion(
+    const uint8_t* img /* unpacked IMAGE_SIZE*IMAGE_SIZE, values 0/1 */,
+    int targetColor,
+    int minX, int minY, int maxX, int maxY
+) {
+  static uint8_t visited[(IMAGE_SIZE * IMAGE_SIZE) / 8];
+  static uint16_t stack[IMAGE_SIZE * IMAGE_SIZE];
 
-    for (int y = minY; y <= maxY; y++) {
-        for (int x = minX; x <= maxX; x++) {
+  visitedClear(visited, sizeof(visited));
 
-            if (image[y][x] != targetColor || visited[y][x])
-                continue;
+  ComponentBox best;
+  best.size = 0;
 
-            ComponentBox current;
-            current.minX = current.maxX = x;
-            current.minY = current.maxY = y;
-            current.size = 0;
+  for (int y = minY; y <= maxY; y++) {
+    for (int x = minX; x <= maxX; x++) {
+      const uint16_t idx = uint16_t(y * IMAGE_SIZE + x);
+      if (img[idx] != targetColor) continue;
+      if (visitedGet(visited, idx)) continue;
 
-            int sp = 0;
-            stackX[sp] = x;
-            stackY[sp] = y;
-            sp++;
-            visited[y][x] = 1;
+      ComponentBox cur;
+      cur.minX = cur.maxX = x;
+      cur.minY = cur.maxY = y;
+      cur.size = 0;
 
-            while (sp > 0) {
-                sp--;
-                int cx = stackX[sp];
-                int cy = stackY[sp];
+      uint16_t sp = 0;
+      stack[sp++] = packXY(uint8_t(x), uint8_t(y));
+      visitedSet(visited, idx);
 
-                current.size++;
+      while (sp > 0) {
+        const uint16_t v = stack[--sp];
+        const int cx = unpackX(v);
+        const int cy = unpackY(v);
 
-                if (cx < current.minX) current.minX = cx;
-                if (cx > current.maxX) current.maxX = cx;
-                if (cy < current.minY) current.minY = cy;
-                if (cy > current.maxY) current.maxY = cy;
+        cur.size++;
+        if (cx < cur.minX) cur.minX = cx;
+        if (cx > cur.maxX) cur.maxX = cx;
+        if (cy < cur.minY) cur.minY = cy;
+        if (cy > cur.maxY) cur.maxY = cy;
 
-                const int dx[4] = { 1, -1, 0, 0 };
-                const int dy[4] = { 0, 0, 1, -1 };
-
-                for (int i = 0; i < 4; i++) {
-                    int nx = cx + dx[i];
-                    int ny = cy + dy[i];
-
-                    if (nx < minX || ny < minY || nx > maxX || ny > maxY)
-                        continue;
-
-                    if (image[ny][nx] == targetColor && !visited[ny][nx]) {
-                        visited[ny][nx] = 1;
-                        stackX[sp] = nx;
-                        stackY[sp] = ny;
-                        sp++;
-                    }
-                }
-            }
-
-            if (current.size > best.size)
-                best = current;
+        // 4-neighbors
+        // (manually unrolled for speed + small code)
+        // right
+        if (cx + 1 <= maxX) {
+          int nx = cx + 1, ny = cy;
+          uint16_t nidx = uint16_t(ny * IMAGE_SIZE + nx);
+          if (img[nidx] == targetColor && !visitedGet(visited, nidx)) {
+            visitedSet(visited, nidx);
+            stack[sp++] = packXY(uint8_t(nx), uint8_t(ny));
+          }
         }
-    }
+        // left
+        if (cx - 1 >= minX) {
+          int nx = cx - 1, ny = cy;
+          uint16_t nidx = uint16_t(ny * IMAGE_SIZE + nx);
+          if (img[nidx] == targetColor && !visitedGet(visited, nidx)) {
+            visitedSet(visited, nidx);
+            stack[sp++] = packXY(uint8_t(nx), uint8_t(ny));
+          }
+        }
+        // down
+        if (cy + 1 <= maxY) {
+          int nx = cx, ny = cy + 1;
+          uint16_t nidx = uint16_t(ny * IMAGE_SIZE + nx);
+          if (img[nidx] == targetColor && !visitedGet(visited, nidx)) {
+            visitedSet(visited, nidx);
+            stack[sp++] = packXY(uint8_t(nx), uint8_t(ny));
+          }
+        }
+        // up
+        if (cy - 1 >= minY) {
+          int nx = cx, ny = cy - 1;
+          uint16_t nidx = uint16_t(ny * IMAGE_SIZE + nx);
+          if (img[nidx] == targetColor && !visitedGet(visited, nidx)) {
+            visitedSet(visited, nidx);
+            stack[sp++] = packXY(uint8_t(nx), uint8_t(ny));
+          }
+        }
 
-    return best;
+        // Safety: if stack would overflow, stop expanding this component
+        // (shouldn't happen unless the whole area is one big component)
+        if (sp >= IMAGE_SIZE * IMAGE_SIZE) break;
+      }
+
+      if (cur.size > best.size) best = cur;
+    }
+  }
+
+  return best;
 }
 
-void cropPatch(uint8_t image[IMAGE_SIZE][IMAGE_SIZE], ComponentBox box, uint8_t patch[PATCH_SIZE][PATCH_SIZE]) {
-    for (int y = 0; y < PATCH_SIZE; y++)
-        for (int x = 0; x < PATCH_SIZE; x++)
-            patch[y][x] = 1;
+static void cropPatch(
+    const uint8_t* img /* unpacked IMAGE_SIZE*IMAGE_SIZE */,
+    const ComponentBox& box,
+    uint8_t* patch /* PATCH_SIZE*PATCH_SIZE */
+) {
+  // fill with 1s
+  memset(patch, 1, PATCH_SIZE * PATCH_SIZE);
 
-    int boxWidth  = box.maxX - box.minX + 1;
-    int boxHeight = box.maxY - box.minY + 1;
+  const int boxW = box.maxX - box.minX + 1;
+  const int boxH = box.maxY - box.minY + 1;
 
-    int cropWidth  = std::min(PATCH_SIZE, boxWidth);
-    int cropHeight = std::min(PATCH_SIZE, boxHeight);
+  const int cropW = (boxW < PATCH_SIZE) ? boxW : PATCH_SIZE;
+  const int cropH = (boxH < PATCH_SIZE) ? boxH : PATCH_SIZE;
 
-    int offsetX = (PATCH_SIZE - cropWidth) / 2;
-    int offsetY = (PATCH_SIZE - cropHeight) / 2;
+  const int offX = (PATCH_SIZE - cropW) / 2;
+  const int offY = (PATCH_SIZE - cropH) / 2;
 
-    for (int y = 0; y < cropHeight; y++)
-        for (int x = 0; x < cropWidth; x++)
-            patch[offsetY + y][offsetX + x] = image[box.minY + y][box.minX + x];
+  for (int y = 0; y < cropH; y++) {
+    const int srcY = box.minY + y;
+    for (int x = 0; x < cropW; x++) {
+      const int srcX = box.minX + x;
+      patch[(offY + y) * PATCH_SIZE + (offX + x)] = img[srcY * IMAGE_SIZE + srcX];
+    }
+  }
 }
 
-void printPatch(uint8_t patch[PATCH_SIZE][PATCH_SIZE]) {
-    std::cout << "Patch pixels:\n";
-    for (int y = 0; y < PATCH_SIZE; y++) {
-        for (int x = 0; x < PATCH_SIZE; x++)
-            std::cout << (int)patch[y][x];
-        std::cout << "\n";
-    }
-}
+void cropImage(const uint8_t* fullImage, uint8_t* out) {
+  static uint8_t unpacked[IMAGE_SIZE * IMAGE_SIZE];
+  unpackImage(fullImage, unpacked);
 
-void printCardBox(uint8_t image[IMAGE_SIZE][IMAGE_SIZE], ComponentBox box) {
-    std::cout << "CardBox pixels:\n";
-    for (int y = box.minY; y <= box.maxY; y++) {
-        for (int x = box.minX; x <= box.maxX; x++)
-            std::cout << (int)image[y][x];
-        std::cout << "\n";
-    }
-}
+  ComponentBox cardBox = findLargestRegion(unpacked, 1, 0, 0, IMAGE_SIZE - 1, IMAGE_SIZE - 1);
+  ComponentBox blackBox = findLargestRegion(unpacked, 0, cardBox.minX, cardBox.minY, cardBox.maxX, cardBox.maxY);
 
-uint8_t* cropImage(const uint8_t* fullImage) {
-    uint8_t unpacked[IMAGE_SIZE][IMAGE_SIZE];
-    unpackImage(fullImage, IMAGE_SIZE, IMAGE_SIZE, unpacked);
+  if (cardBox.size == 0 || blackBox.size == 0) {
+    memset(out, 1, PATCH_SIZE * PATCH_SIZE);
+    return;
+  }
 
-    ComponentBox cardBox = findLargestRegion(unpacked, 1, 0, 0, IMAGE_SIZE - 1, IMAGE_SIZE - 1);
-    std::cout << "Card box: (" << cardBox.minX << "," << cardBox.minY << ") - (" << cardBox.maxX << "," << cardBox.maxY << ")\n";
-
-    ComponentBox blackBox = findLargestRegion(unpacked, 0, cardBox.minX, cardBox.minY, cardBox.maxX, cardBox.maxY);
-    std::cout << "Largest black region inside card: (" << blackBox.minX << "," << blackBox.minY << ") - (" << blackBox.maxX << "," << blackBox.maxY << ")\n";
-
-    if (cardBox.size == 0 || blackBox.size == 0) {
-        uint8_t* empty = new uint8_t[PATCH_SIZE * PATCH_SIZE];
-        std::fill(empty, empty + PATCH_SIZE * PATCH_SIZE, 1);
-        return empty;
-    }
-
-    uint8_t patch[PATCH_SIZE][PATCH_SIZE];
-    cropPatch(unpacked, blackBox, patch);
-
-    printCardBox(unpacked, cardBox);
-    printPatch(patch);
-
-    uint8_t* croppedImage = new uint8_t[PATCH_SIZE * PATCH_SIZE];
-    for (int y = 0; y < PATCH_SIZE; y++)
-        for (int x = 0; x < PATCH_SIZE; x++)
-            croppedImage[y * PATCH_SIZE + x] = patch[y][x];
-
-    return croppedImage;
+  cropPatch(unpacked, blackBox, out);
 }
