@@ -4,7 +4,6 @@ import random
 from pathlib import Path
 from PIL import Image, ImageOps
 
-DATA_PATH = Path("dataset")
 CLASSES = ("diamonds", "clubs", "hearts", "spades")
 RESOLUTION = 128 # Images get resized to RESOLUTION x RESOLUTION pixels
 WHITE_THRESHOLD = 170 # The grayscale pixel value needed to qualify as white
@@ -50,11 +49,11 @@ def bits_to_bytes(array):
             bytes_array.append(byte)
     return bytes_array
 
-def load_images():
+def load_images(path):
     images = []
     labels = []
     for label, class_name in enumerate(CLASSES):
-        for file_path in DATA_PATH.joinpath(class_name).glob("*.jpeg"):
+        for file_path in path.joinpath(class_name).glob("*.jpeg"):
             if not file_path.stem[0].isdigit():  # For now we only look at the number cards
                 continue
             image = Image.open(file_path)
@@ -79,33 +78,51 @@ def train_val_split(images, labels):
 
     return train_images, train_labels, val_images, val_labels
 
+def central_peripheral_split(images, labels):
+    first_peripheral_index = images.shape[0] // 2
+    central_images = images[:first_peripheral_index]
+    central_labels = labels[:first_peripheral_index]
+    peripheral_images = images[first_peripheral_index:]
+    peripheral_labels = labels[first_peripheral_index:]
+    return central_images, central_labels, peripheral_images, peripheral_labels
 
-def create_file_content(images, labels, data_group):
-    content = f"\nconst uint8_t {data_group}Images[{images.shape[0]}][{images.shape[1]}] PROGMEM = {{\n"
+
+def create_file_content(images, labels, device, data_group):
+    content = f"\nconst uint8_t {device}{data_group}Images[{images.shape[0]}][{images.shape[1]}] PROGMEM = {{\n"
     for image in images:
         content += "    {"
         content += ", ".join(str(byte) for byte in image)
         content += "},\n"
     content += "};\n"
 
-    content += f"\nconst uint8_t {data_group}Labels[{labels.shape[0]}] PROGMEM = {{\n    "
+    content += f"\nconst uint8_t {device}{data_group}Labels[{labels.shape[0]}] PROGMEM = {{\n    "
     content += ", ".join(str(l) for l in labels)
     content += "\n};\n"
 
     return content
 
-def write_to_file(content_tuple):
-    with open("model/data.h", "w") as file:
+def write_to_file(file_path, content_tuple):
+    with open(file_path, "w") as file:
         for content in content_tuple:
             file.write(content)
 
 
-images, labels = load_images()
+images, labels = load_images(Path("dataset"))
 train_images, train_labels, val_images, val_labels = train_val_split(images, labels)
-train_data_string = create_file_content(train_images, train_labels, "train")
-val_data_string = create_file_content(val_images, val_labels, "val")
-inclusions = "#pragma once\n#include <cstdint>\n#include <Arduino.h>\n"
-definitions = f"\n#define NBR_TRAIN_IMAGES {train_images.shape[0]}\n#define NBR_VAL_IMAGES {val_images.shape[0]}\n"
-write_to_file((inclusions, definitions, train_data_string, val_data_string))
+central_train_images, central_train_labels, peripheral_train_images, peripheral_train_labels = central_peripheral_split(train_images, train_labels)
+central_val_images, central_val_labels, peripheral_val_images, peripheral_val_labels = central_peripheral_split(val_images, val_labels)
 
-visualise_images(train_images)
+central_train_data_string = create_file_content(central_train_images, central_train_labels, "central", "Train")
+central_val_data_string = create_file_content(central_val_images, central_val_labels, "central", "Val")
+peripheral_train_data_string = create_file_content(peripheral_train_images, peripheral_train_labels, "peripheral", "Train")
+peripheral_val_data_string = create_file_content(peripheral_val_images, peripheral_val_labels, "peripheral", "Val")
+inclusions = "#pragma once\n#include <cstdint>\n#include <Arduino.h>\n"
+definitions = f"\n#define NBR_CENTRAL_TRAIN_IMAGES {central_train_images.shape[0]}\n#define NBR_CENTRAL_VAL_IMAGES {central_val_images.shape[0]}\n"
+definitions += f"#define NBR_PERIPHERAL_TRAIN_IMAGES {peripheral_train_images.shape[0]}\n#define NBR_PERIPHERAL_VAL_IMAGES {peripheral_val_images.shape[0]}\n"
+write_to_file("model/Data.h", (inclusions, definitions, central_train_data_string, central_val_data_string, peripheral_train_data_string, peripheral_val_data_string))
+
+# Added to get a test dataset if the camera doesn't work
+test_images, test_labels = load_images(Path("test_data"))
+test_data_string = create_file_content(test_images, test_labels, "", "test")
+test_definition = f"\n#define NBR_TEST_IMAGES {test_images.shape[0]}\n"
+write_to_file("model/TestData.h", (inclusions, test_definition, test_data_string))
