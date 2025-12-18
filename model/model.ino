@@ -71,8 +71,6 @@ static void validate() {
   size_t total = 0;
   size_t nbrImages = (BLE_DEVICE == 0) ? NBR_CENTRAL_VAL_IMAGES : NBR_PERIPHERAL_VAL_IMAGES;
   for (int i = 0; i < nbrImages; i++) {
-    //Serial.print("Validating with image ");
-    //Serial.println(i);
     for (int j = 0; j < IMAGE_SIZE * IMAGE_SIZE / 8; j++) {
       fullImage[j] = (BLE_DEVICE == 0) ? pgm_read_byte(&centralValImages[i][j]) : pgm_read_byte(&peripheralValImages[i][j]);
     }
@@ -162,18 +160,6 @@ bool captureFromCamera() {
   return true;
 }
 
-void testCamera() {
-  for (int i = 0; i < 5; i++) { // Take some pictures first to discard
-    Camera.readFrame(cameraBuffer); 
-    delay(50);
-  }
-  Serial.println("Capturing one frame...");
-  captureFromCamera();
-  Serial.println("Captured. Cropping...");
-  cropImage(fullImage, croppedImage);
-  printImage(croppedImage);
-}
-
 void bleCentralSetup() {
   Serial.println("This is the Central Device. The central device will first get weights from the peripheral device");
   bleCentralSetUp();
@@ -188,7 +174,7 @@ void bleCentralSetup() {
   BLECharacteristic notifyChr = getNotifyCharacteristic(peripheral);
   delay(200);
   if (notifyChr.canSubscribe()) notifyChr.subscribe();
-  Serial.println("has subscribed");
+  Serial.println("Has subscribed");
   delay(200);
 
   // Skickar GO till peripheral, att central är redo
@@ -200,7 +186,7 @@ void bleCentralSetup() {
 
   //Hämtar vikter från peripheral
   centralReceiveWeightsFromPeripheral(notifyChr);
-  Serial.println("central recieved weights");
+  Serial.println("Central recieved weights");
 
   //beräkna nya vikter utifrån peripheral
   Serial.println("Calculating new weights");
@@ -217,7 +203,7 @@ void bleCentralSetup() {
 void blePeripheralSetup() {
   Serial.println("Peripheral Device");
   blePeripheralSetUp();
-  Serial.println("Peripheral device set up completets");
+  Serial.println("Peripheral device set up complete");
 
   //Ensuring connection to central
   static bool sent = false;
@@ -266,8 +252,6 @@ void setup() {
   float accuracyBefore = calculateTestAccuracy();
   Serial.print("Accuracy with test data (before FL): ");
   Serial.println(accuracyBefore);
-
-  //testCamera();
 
   if (BLE_DEVICE == 0) {
     bleCentralSetup();

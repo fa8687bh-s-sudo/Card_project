@@ -67,7 +67,7 @@ void blePeripheralSetUp() {
  * @brief Scan for and return a peripheral that exposes the target service UUID.
  */
 BLEDevice connectToPeripheral() {
-  Serial.println("- Scanning for peripheral with target service...");
+  Serial.println("Scanning for peripheral with target service...");
 
   BLE.scanForUuid(deviceServiceUuid);
 
@@ -80,7 +80,7 @@ BLEDevice connectToPeripheral() {
 
   BLE.stopScan();
 
-  Serial.println("* Peripheral found!");
+  Serial.println("Peripheral found!");
   Serial.print("* MAC: ");
   Serial.println(peripheral.address());
   Serial.print("* Name: ");
@@ -151,10 +151,8 @@ void sendUpdatedWeightsToPeripheral(BLECharacteristic& chr) {
     memcpy(b, &weightsAndBiases[i], sizeof(float));
     chr.writeValue(b, sizeof(float));
     if (i % 200 == 0){
-      Serial.print("Weight number ");
       Serial.print(i);
-      Serial.print(" ");
-      Serial.println(weightsAndBiases[i], 5);
+      Serial.println(" weights sent");
     }
     BLE.poll();
     delay(10);
@@ -172,10 +170,8 @@ int peripheralReadEachWeight(BLEDevice central) {
       float v;
       int n = weightChar.readValue((uint8_t*)&v, sizeof(float));
       if (countperipheralReadEachWeight % 200 == 0){
-        Serial.print("Weight number ");
         Serial.print(countperipheralReadEachWeight);
-        Serial.print(": ");
-        Serial.println(v, 5);
+        Serial.println(" weights received");
         }
       if (n != (int)sizeof(float)) {
         Serial.println("Failed to read float");
@@ -216,10 +212,8 @@ void peripheralSendWeightsToCentral() {
   for (int i = 0; i < TOTAL_PARAMS; i++) {
     notifyChar.writeValue((uint8_t*)&weightsAndBiases[i], sizeof(float));
     if (i % 200 == 0){
-      Serial.print("Weight number ");
       Serial.print(i);
-      Serial.print(": ");
-      Serial.println(weightsAndBiases[i], 5);
+      Serial.println(" weights sent");
     }
     BLE.poll();
     delay(10);
@@ -234,10 +228,8 @@ int centralReceiveWeightsFromPeripheral(BLECharacteristic& notifyRemote) {
       float v;
       int n = notifyRemote.readValue((uint8_t*)&v, sizeof(float));
       if (countCentralRecieveWeights % 200 == 0){
-        Serial.print("Weight number ");
         Serial.print(countCentralRecieveWeights);
-        Serial.print(" ");
-        Serial.println(v, 5);
+        Serial.println(" weights received");
       }
       if (n == (int)sizeof(float)) {
         weightsAndBiases[countCentralRecieveWeights++] = v;

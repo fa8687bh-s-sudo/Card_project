@@ -187,13 +187,13 @@ void updateAccuracy(const uint8_t* image, size_t label, size_t& correctCount, si
             maxIndex = neuron;
         }
     }
-
+    /*
     Serial.print("PREDICTION: ");
     Serial.println(maxIndex);
     Serial.print("CORRECT: ");
     Serial.println(label);
     Serial.println();
-
+    */
     if(maxIndex == label) {
         correctCount++;
     }
@@ -213,7 +213,7 @@ void packWeights() {
         }
     }
     numParams = counter;
-    Serial.print("After packWeights, numParams = ");
+    Serial.print("Number of parameters to send: ");
     Serial.println(numParams);
 }
 
