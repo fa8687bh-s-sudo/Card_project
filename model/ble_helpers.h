@@ -18,7 +18,7 @@ const char* weightCharUuid    = "19b10001-e8f2-537e-4f6c-d104768a1214"; // centr
 const char* notifyCharUuid    = "19b10003-e8f2-537e-4f6c-d104768a1214"; // peripheral -> central (NOTIFY)
 
 // TOTAL_PARAMS = exakt hur många floats packWeights() ger
-const int TOTAL_PARAMS = 200;
+const int TOTAL_PARAMS = 10294;
 
 
 // ==================== WEIGHT DECLARATIONS ====================
@@ -38,8 +38,9 @@ void bleCentralSetUp();
 void blePeripheralSetUp();
 BLEDevice connectToPeripheral();
 BLECharacteristic getWeightCharacteristic(BLEDevice peripheral);
-void writeWeightsToCharacteristic(BLECharacteristic& chr);
-int readWeightsBlocking(BLEDevice central);
+BLECharacteristic getNotifyCharacteristic(BLEDevice peripheral);
+void sendUpdatedWeightsToPeripheral(BLECharacteristic& chr);
+int peripheralReadEachWeight(BLEDevice central);
 BLEService weightService(deviceServiceUuid);
 
 
@@ -143,6 +144,8 @@ BLECharacteristic getWeightCharacteristic(BLEDevice peripheral) {
   BLECharacteristic chr = peripheral.characteristic(weightCharUuid);
   if (!chr) Serial.println("Characteristic not found!");
   return chr;
+
+  Serial.println("Got weight characteristic from peripheral device");
 }
 
 /**
@@ -150,7 +153,11 @@ BLECharacteristic getWeightCharacteristic(BLEDevice peripheral) {
  */
 BLECharacteristic getNotifyCharacteristic(BLEDevice peripheral) {
   BLECharacteristic chr = peripheral.characteristic(notifyCharUuid);
-  if (!chr) Serial.println("Notify characteristic not found!");
+  if (!chr){
+    Serial.println("Notify characteristic not found!");
+    return chr;
+  }
+  Serial.println("Got weight characteristic from peripheral device");
   return chr;
 }
 
@@ -159,7 +166,7 @@ BLECharacteristic getNotifyCharacteristic(BLEDevice peripheral) {
 /**
  * @brief Write the current weights to the given BLE characteristic.
  */
-void writeWeightsToCharacteristic(BLECharacteristic& chr) {
+void sendUpdatedWeightsToPeripheral(BLECharacteristic& chr) {
   packWeights();
   Serial.println("Packing weights");
 
@@ -168,7 +175,7 @@ void writeWeightsToCharacteristic(BLECharacteristic& chr) {
     memcpy(b, &weightsAndBias[i], sizeof(float));
     chr.writeValue(b, sizeof(float));
     if (i % 200 == 0){
-      Serial.println("Weight number ");
+      Serial.print("Weight number ");
       Serial.print(i);
       Serial.print(" ");
       Serial.println(weightsAndBias[i]);
@@ -189,10 +196,10 @@ int peripheralReadEachWeight(BLEDevice central) {
       float v;
       int n = weightChar.readValue((uint8_t*)&v, sizeof(float));
       if (countperipheralReadEachWeight % 200 == 0){
-        Serial.println("Weight number ");
+        Serial.print("Weight number ");
         Serial.print(countperipheralReadEachWeight);
         Serial.print(": ");
-        Serial.print(v);
+        Serial.println(v);
         }
       if (n != (int)sizeof(float)) {
         Serial.println("Failed to read float");
@@ -228,11 +235,12 @@ void peripheralRecievingWeightsFromCentral(){
 void peripheralSendWeightsToCentral() {
   packWeights();
   Serial.println("inside peripheralSendWeightsToCentral");
+  delay(500);
 
   for (int i = 0; i < TOTAL_PARAMS; i++) {
     notifyChar.writeValue((uint8_t*)&weightsAndBias[i], sizeof(float));
     if (i % 200 == 0){
-      Serial.println("Weight number ");
+      Serial.print("Weight number ");
       Serial.print(i);
       Serial.print(": ");
       Serial.println(weightsAndBias[i]);
@@ -250,7 +258,7 @@ int centralReceiveWeightsFromPeripheral(BLECharacteristic& notifyRemote) {
       float v;
       int n = notifyRemote.readValue((uint8_t*)&v, sizeof(float));
       if (countCentralRecieveWeights % 200 == 0){
-        Serial.println("Weight number ");
+        Serial.print("Weight number ");
         Serial.print(countCentralRecieveWeights);
         Serial.print(" ");
         Serial.println(v);

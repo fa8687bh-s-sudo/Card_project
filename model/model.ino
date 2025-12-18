@@ -84,16 +84,13 @@ void setup(){
 
     // Hittar peripheral
     BLEDevice peripheral = connectToPeripheral();
-    Serial.println("Central device connected to peripheral device");
-
+    
     //Hämtar Characteristics från peripheral
     BLECharacteristic peripheral_characteristic = getWeightCharacteristic(peripheral);
-    Serial.println("Got weight characteristic from peripheral device");
 
     // Hämta vikt-karaktäristiken
     BLECharacteristic notifyChr = getNotifyCharacteristic(peripheral);
     delay(200);
-    Serial.println("Got weight characteristic from peripheral device");
     if (notifyChr.canSubscribe()) notifyChr.subscribe();
     Serial.println("has subscribed");
     delay(200);
@@ -112,10 +109,11 @@ void setup(){
     //beräkna nya vikter utifrån peripheral
     Serial.println("Calculating new weights");
     averageWeights();
+    unpackWeights();
 
     // Skriv tillbaka globala vikter till peripheral
     Serial.println("Sending updated global weights back to peripheral...");
-    writeWeightsToCharacteristic(peripheral_characteristic);
+    sendUpdatedWeightsToPeripheral(peripheral_characteristic);
 
     Serial.println("Central done.");
 
