@@ -11,28 +11,16 @@
 
 
 // UUID of the BLE service that the central device will look for on the peripheral.
-const char* deviceServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214"; // denna ska anpassas
+const char* deviceServiceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214";
 
 // UUID of the characteristic used for transferring weights between central and peripheral.
 const char* weightCharUuid    = "19b10001-e8f2-537e-4f6c-d104768a1214"; // central -> peripheral (WRITE)
 const char* notifyCharUuid    = "19b10003-e8f2-537e-4f6c-d104768a1214"; // peripheral -> central (NOTIFY)
 
-// TOTAL_PARAMS = exakt hur många floats packWeights() ger
-const int TOTAL_PARAMS = 10294;
-
-
-// ==================== WEIGHT DECLARATIONS ====================
-
-const int MAX_WEIGHTS = 24000;
-float weightsAndBias[MAX_PARAMS]; 
-
-uint8_t weights[MAX_WEIGHTS];
-int numWeightsUsed = 0;
+extern float weightsAndBiases[];
 
 BLECharacteristic weightChar(weightCharUuid, BLEWrite,  sizeof(float));   // c->p
 BLECharacteristic notifyChar(notifyCharUuid, BLEIndicate, sizeof(float));   // p->c
-
-// ==================== FUNCTION DECLARATIONS ====================
 
 void bleCentralSetUp();
 void blePeripheralSetUp();
@@ -42,12 +30,6 @@ BLECharacteristic getNotifyCharacteristic(BLEDevice peripheral);
 void sendUpdatedWeightsToPeripheral(BLECharacteristic& chr);
 int peripheralReadEachWeight(BLEDevice central);
 BLEService weightService(deviceServiceUuid);
-
-
-// ==================== FUNCTION IMPLEMENTATIONS ====================
-
-
-// ==================== SETUPS ====================
 
 /**
  * @brief Set up the device as a BLE central.
@@ -81,8 +63,6 @@ void blePeripheralSetUp() {
   Serial.println("Peripheral ready");
 }
 
-// ==================== ENABLING CONNECTION ====================
-
 /**
  * @brief Scan for and return a peripheral that exposes the target service UUID.
  */
@@ -109,8 +89,6 @@ BLEDevice connectToPeripheral() {
   return peripheral;
 }
 
-// ==================== GETTING CHARACTERISTICS ====================
-
 /**
  * @brief Connect to a peripheral and retrieve the weight characteristic.
  */
@@ -124,7 +102,7 @@ BLECharacteristic getWeightCharacteristic(BLEDevice peripheral) {
 
   // Retry discoverAttributes 5 times
   bool ok = false;
-  for (int attempt = 0; attempt < 5; attempt++) {
+  for (int attempt = 0; attempt < 20; attempt++) {
     if (peripheral.discoverAttributes()) {
       ok = true;
       break;
@@ -161,8 +139,6 @@ BLECharacteristic getNotifyCharacteristic(BLEDevice peripheral) {
   return chr;
 }
 
-// ==================== SENDING DATA ====================
-
 /**
  * @brief Write the current weights to the given BLE characteristic.
  */
@@ -172,16 +148,16 @@ void sendUpdatedWeightsToPeripheral(BLECharacteristic& chr) {
 
   for (int i = 0; i < TOTAL_PARAMS; i++) {
     uint8_t b[sizeof(float)];
-    memcpy(b, &weightsAndBias[i], sizeof(float));
+    memcpy(b, &weightsAndBiases[i], sizeof(float));
     chr.writeValue(b, sizeof(float));
     if (i % 200 == 0){
       Serial.print("Weight number ");
       Serial.print(i);
       Serial.print(" ");
-      Serial.println(weightsAndBias[i]);
+      Serial.println(weightsAndBiases[i], 5);
     }
     BLE.poll();
-    delay(20);
+    delay(10);
   }
 }
 
@@ -199,13 +175,13 @@ int peripheralReadEachWeight(BLEDevice central) {
         Serial.print("Weight number ");
         Serial.print(countperipheralReadEachWeight);
         Serial.print(": ");
-        Serial.println(v);
+        Serial.println(v, 5);
         }
       if (n != (int)sizeof(float)) {
         Serial.println("Failed to read float");
       }
 
-      weightsAndBias[countperipheralReadEachWeight++] = v;
+      weightsAndBiases[countperipheralReadEachWeight++] = v;
 
       if (countperipheralReadEachWeight >= TOTAL_PARAMS) {
         numParams = TOTAL_PARAMS;
@@ -223,7 +199,7 @@ void peripheralRecievingWeightsFromCentral(){
   if (central) {
     int got = 0;
     while (got < TOTAL_PARAMS){
-      int got = peripheralReadEachWeight(central);
+      got = peripheralReadEachWeight(central);
       if (got >= TOTAL_PARAMS) {
         unpackWeights();
         return;
@@ -238,15 +214,15 @@ void peripheralSendWeightsToCentral() {
   delay(500);
 
   for (int i = 0; i < TOTAL_PARAMS; i++) {
-    notifyChar.writeValue((uint8_t*)&weightsAndBias[i], sizeof(float));
+    notifyChar.writeValue((uint8_t*)&weightsAndBiases[i], sizeof(float));
     if (i % 200 == 0){
       Serial.print("Weight number ");
       Serial.print(i);
       Serial.print(": ");
-      Serial.println(weightsAndBias[i]);
+      Serial.println(weightsAndBiases[i], 5);
     }
     BLE.poll();
-    delay(20);
+    delay(10);
   }
 }
 
@@ -261,19 +237,16 @@ int centralReceiveWeightsFromPeripheral(BLECharacteristic& notifyRemote) {
         Serial.print("Weight number ");
         Serial.print(countCentralRecieveWeights);
         Serial.print(" ");
-        Serial.println(v);
+        Serial.println(v, 5);
       }
       if (n == (int)sizeof(float)) {
-        weightsAndBias[countCentralRecieveWeights++] = v;
+        weightsAndBiases[countCentralRecieveWeights++] = v;
         }
       }
     }
   //numParams = TOTAL_PARAMS;
   return countCentralRecieveWeights;
   }
-
-
-// ==================== WAIT FUNCTION ====================
 
 void waitForGo() {
   Serial.println("Waiting for GO from central...");
@@ -291,5 +264,3 @@ void waitForGo() {
     }
   }
 }
-
-
