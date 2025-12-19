@@ -10,8 +10,8 @@ constexpr int BLE_DEVICE = 0; // 0 - central, 1 - peripheral
 constexpr int NBR_EPOCHS = 30;
 constexpr int BIG_WIDTH = IMAGE_SIZE;
 constexpr int BIG_HEIGHT = IMAGE_SIZE;
-constexpr int CAMERA_WIDTH = 176;
-constexpr int CAMERA_HEIGHT = 144;
+constexpr int CAMERA_WIDTH = 160;
+constexpr int CAMERA_HEIGHT = 120;
 constexpr uint8_t GRAYSCALE_THRESHOLD = 150;
 float weightsAndBiases[TOTAL_PARAMS];
 static uint8_t cameraBuffer[CAMERA_WIDTH * CAMERA_HEIGHT * 2];
@@ -23,24 +23,6 @@ static void printImage(uint8_t* image) {
     for (int k = 0; k < PATCH_SIZE; k++) {
       Serial.print(image[j * PATCH_SIZE + k]);
       Serial.print(" ");
-    }
-    Serial.println();
-  }
-}
-
-static void printGrayPreview() {
-  for (int y = 0; y < CAMERA_HEIGHT; y += 1) {
-    for (int x = 0; x < CAMERA_WIDTH; x += 1) {
-      int i = (y * CAMERA_WIDTH + x) * 2;
-      uint16_t rgb565 = (uint16_t)cameraBuffer[i] | ((uint16_t)cameraBuffer[i + 1] << 8);
-
-      uint8_t r = ((rgb565 >> 11) & 0x1F) << 3;
-      uint8_t g = ((rgb565 >>  5) & 0x3F) << 2;
-      uint8_t b = ((rgb565 >>  0) & 0x1F) << 3;
-      uint8_t gray = (30u * r + 59u * g + 11u * b) / 100u;
-
-      const char ramp[] = "@&#*+=-:. ";
-      Serial.print(ramp[ gray / 26 ]);
     }
     Serial.println();
   }
@@ -75,12 +57,9 @@ static void validate() {
       fullImage[j] = (BLE_DEVICE == 0) ? pgm_read_byte(&centralValImages[i][j]) : pgm_read_byte(&peripheralValImages[i][j]);
     }
     uint8_t label = (BLE_DEVICE == 0) ? pgm_read_byte(&centralValLabels[i]): pgm_read_byte(&peripheralValLabels[i]);
+
     cropImage(fullImage, croppedImage);
-
-    updateAccuracy(croppedImage, label, correct, total);
-
-    //printImage(croppedImage);    
-
+    updateAccuracy(croppedImage, label, correct, total);   
     delay(1);
   }
   float accuracy = (total > 0) ? (float) correct / total : 0.0f;
@@ -116,24 +95,29 @@ float calculateTestAccuracy() {
 
 bool captureFromCamera() {
   constexpr int outputPixelCount = BIG_WIDTH * BIG_HEIGHT;
-  constexpr int outputByteCount = outputPixelCount / 8;
+  constexpr int outputByteCount  = outputPixelCount / 8;
+  constexpr int PAD_Y = (BIG_HEIGHT - CAMERA_HEIGHT) / 2; // We had to lower the camera resolution to 160x120 to save RAM, so now we have to pad to make the height 128
 
-  for (int byteIndex = 0; byteIndex < outputByteCount; byteIndex++) {
-    fullImage[byteIndex] = 0;
-  }
-
+  memset(fullImage, 0, outputByteCount);
   Camera.readFrame(cameraBuffer);
-  printGrayPreview();
 
   for (int outY = 0; outY < BIG_HEIGHT; outY++) {
-    const int srcY = (outY * CAMERA_HEIGHT) / BIG_HEIGHT;
+    const int paddedSrcY = (outY * BIG_HEIGHT) / BIG_HEIGHT;
+    if (paddedSrcY < PAD_Y || paddedSrcY >= (PAD_Y + CAMERA_HEIGHT)) {
+      continue;
+    }
+
+    const int srcY = paddedSrcY - PAD_Y;
 
     for (int outX = 0; outX < BIG_WIDTH; outX++) {
       const int srcX = (outX * CAMERA_WIDTH) / BIG_WIDTH;
-      const int srcPixelIndex = (srcY * CAMERA_WIDTH + srcX);
-      const int srcByteIndex = srcPixelIndex * 2;
 
-      const uint16_t rgb565 = (uint16_t)cameraBuffer[srcByteIndex] | ((uint16_t)cameraBuffer[srcByteIndex + 1] << 8);
+      const int srcPixelIndex = (srcY * CAMERA_WIDTH + srcX);
+      const int srcByteIndex  = srcPixelIndex * 2;
+
+      const uint16_t rgb565 =
+        (uint16_t)cameraBuffer[srcByteIndex] |
+        ((uint16_t)cameraBuffer[srcByteIndex + 1] << 8);
 
       const uint8_t red5   = (rgb565 >> 11) & 0x1F;
       const uint8_t green6 = (rgb565 >>  5) & 0x3F;
@@ -143,15 +127,13 @@ bool captureFromCamera() {
       const uint8_t green8 = (uint8_t)(green6 << 2);
       const uint8_t blue8  = (uint8_t)(blue5 << 3);
 
-      const uint8_t grayscale = (uint8_t)((30u * red8 + 59u * green8 + 11u * blue8) / 100u);
+      const uint8_t grayscale =
+        (uint8_t)((30u * red8 + 59u * green8 + 11u * blue8) / 100u);
 
-      const bool isWhitePixel = (grayscale >= GRAYSCALE_THRESHOLD);
-
-      const int outLinearIndex = outY * BIG_WIDTH + outX;
-      const int outPackedByteIndex = outLinearIndex >> 3;
-      const int outBitInByte = 7 - (outLinearIndex & 7);
-
-      if (isWhitePixel) {
+      if (grayscale >= GRAYSCALE_THRESHOLD) {
+        const int outLinearIndex     = outY * BIG_WIDTH + outX;
+        const int outPackedByteIndex = outLinearIndex >> 3;
+        const int outBitInByte       = 7 - (outLinearIndex & 7);
         fullImage[outPackedByteIndex] |= (uint8_t)(1u << outBitInByte);
       }
     }
@@ -265,9 +247,9 @@ void setup() {
 }
 
 void loop() {
-  /*
   captureFromCamera();
   cropImage(fullImage, croppedImage);
+  printImage(croppedImage);
   float prediction[NBR_CLASSES];
   inference(croppedImage, prediction);
   
@@ -283,6 +265,19 @@ void loop() {
           maxIndex = neuron;
       }
   }
-  */
+
+  Serial.print("Prediction for camera image: ");
+  Serial.print(maxIndex);
+  if (maxIndex == 0) {
+    Serial.println(" (diamonds)");
+  } else if (maxIndex == 1) {
+    Serial.println(" (clubs");
+  } else if (maxIndex == 2) {
+    Serial.println(" (hearts)");
+  } else {
+    Serial.println(" (spades)");
+  }
+  Serial.println();
+  delay(5000);
 }
 

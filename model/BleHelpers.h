@@ -191,7 +191,7 @@ int peripheralReadEachWeight(BLEDevice central) {
 
 void peripheralRecievingWeightsFromCentral(){
   BLEDevice central = BLE.central();
-  Serial.println("inside peripheralRecievingWeightsFromCentral");
+  Serial.println("Starting receiving weights from central");
   if (central) {
     int got = 0;
     while (got < TOTAL_PARAMS){
