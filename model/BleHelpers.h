@@ -2,6 +2,7 @@
 #include <ArduinoBLE.h>
 #include <Arduino.h>
 #include "NeuralNetwork.h"
+static float remoteWeights[TOTAL_PARAMS];
 
 
 // This file contains helper methods for Bluetooth Low Energy (BLE) communication.
@@ -232,7 +233,7 @@ int centralReceiveWeightsFromPeripheral(BLECharacteristic& notifyRemote) {
         Serial.println(" weights received");
       }
       if (n == (int)sizeof(float)) {
-        weightsAndBiases[countCentralRecieveWeights++] = v;
+       remoteWeights[countCentralRecieveWeights++] = v;
         }
       }
     }

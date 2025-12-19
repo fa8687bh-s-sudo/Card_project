@@ -172,7 +172,9 @@ void bleCentralSetup() {
 
   //beräkna nya vikter utifrån peripheral
   Serial.println("Calculating new weights");
-  averageWeights();
+  for (int i = 0; i < TOTAL_PARAMS; i++) {
+    weightsAndBiases[i] = 0.5f * (weightsAndBiases[i] + remoteWeights[i]);
+  }
   unpackWeights();
 
   // Skriv tillbaka globala vikter till peripheral
