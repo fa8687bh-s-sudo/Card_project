@@ -21,5 +21,5 @@ Install:
 Tools > Board > Board Manager..., search for Arduino Mbed OS Nano Boards
 Tools > Manage libraries..., search for ArduinoBLE and Arduino_APDS9960, and install them both
 
-
-
+**NOTE**
+The alternative branch differs from main. It excludes the camera functionality, but includes an additional buffer to improve federated learning performance. These two features could not be combined in the same build due to memory constraints.
