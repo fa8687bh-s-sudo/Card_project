@@ -108,9 +108,9 @@ def write_to_file(file_path, content_tuple):
 
 
 images, labels = load_images(Path("dataset"))
-train_images, train_labels, val_images, val_labels = train_val_split(images, labels)
-central_train_images, central_train_labels, peripheral_train_images, peripheral_train_labels = central_peripheral_split(train_images, train_labels)
-central_val_images, central_val_labels, peripheral_val_images, peripheral_val_labels = central_peripheral_split(val_images, val_labels)
+central_images, central_labels, peripheral_images, peripheral_labels = central_peripheral_split(images, labels)
+central_train_images, central_train_labels, central_val_images, central_val_labels = train_val_split(central_images, central_labels)
+peripheral_train_images, peripheral_train_labels, peripheral_val_images, peripheral_val_labels = train_val_split(peripheral_images, peripheral_labels)
 
 central_train_data_string = create_file_content(central_train_images, central_train_labels, "central", "Train")
 central_val_data_string = create_file_content(central_val_images, central_val_labels, "central", "Val")
@@ -119,10 +119,10 @@ peripheral_val_data_string = create_file_content(peripheral_val_images, peripher
 inclusions = "#pragma once\n#include <cstdint>\n#include <Arduino.h>\n"
 definitions = f"\n#define NBR_CENTRAL_TRAIN_IMAGES {central_train_images.shape[0]}\n#define NBR_CENTRAL_VAL_IMAGES {central_val_images.shape[0]}\n"
 definitions += f"#define NBR_PERIPHERAL_TRAIN_IMAGES {peripheral_train_images.shape[0]}\n#define NBR_PERIPHERAL_VAL_IMAGES {peripheral_val_images.shape[0]}\n"
-write_to_file("model/Data.h", (inclusions, definitions, central_train_data_string, central_val_data_string, peripheral_train_data_string, peripheral_val_data_string))
+write_to_file("Data.h", (inclusions, definitions, central_train_data_string, central_val_data_string, peripheral_train_data_string, peripheral_val_data_string))
 
 # Added to get a test dataset if the camera doesn't work
 test_images, test_labels = load_images(Path("test_data"))
 test_data_string = create_file_content(test_images, test_labels, "", "test")
 test_definition = f"\n#define NBR_TEST_IMAGES {test_images.shape[0]}\n"
-write_to_file("model/TestData.h", (inclusions, test_definition, test_data_string))
+write_to_file("TestData.h", (inclusions, test_definition, test_data_string))
